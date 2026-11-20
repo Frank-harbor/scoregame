@@ -121,6 +121,7 @@ button, input { font: inherit; color: inherit; }
 }
 
 .who:hover { color: var(--text); border-color: var(--dim); }
+.who + .who { margin-left: -16px; }
 
 /* ---------- page layout ---------- */
 
@@ -149,6 +150,7 @@ button, input { font: inherit; color: inherit; }
 
 .seg {
   display: inline-flex;
+  flex-wrap: wrap;
   padding: 2px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -259,6 +261,19 @@ button, input { font: inherit; color: inherit; }
   font-variant-numeric: tabular-nums;
 }
 
+/* 1v1 lives: five pips, the spent ones hollow. */
+.tally dd .pip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.tally dd .pip.spent { border-color: var(--line); background: none; }
+
 /* R-19: a short pop when a number changes, so the eye catches the gain. */
 .tally dd.bump { animation: bump 320ms ease-out; }
 
@@ -324,6 +339,18 @@ button, input { font: inherit; color: inherit; }
   text-align: center;
 }
 
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--dim);
+}
+
+.volume input { width: 96px; accent-color: var(--accent); }
+
 .stages li.used { border-color: var(--dim); }
 .stages li.now { border-color: var(--accent); color: var(--text); }
 
@@ -380,6 +407,9 @@ button, input { font: inherit; color: inherit; }
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
+
+/* Movie themes deal ten. */
+.board.ten { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
 .ticket {
   display: flex;
@@ -637,6 +667,21 @@ button, input { font: inherit; color: inherit; }
 .ranks li.me .rank-name,
 .ranks li.me .rank-score { color: var(--accent); }
 
+.side { display: grid; gap: 16px; }
+
+.stats { margin: 0; }
+
+.stats div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.stats dt { font-size: 14px; color: var(--dim); }
+.stats dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+
 .panel-note { margin: 0; padding: 16px 0; border-top: 1px solid var(--line); font-size: 14px; color: var(--dim); }
 .panel-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; color: var(--dim); }
 .panel .btn { margin-bottom: 12px; }
@@ -666,6 +711,11 @@ button, input { font: inherit; color: inherit; }
   background: var(--bg);
 }
 
+.sheet.wide { width: min(480px, calc(100vw - 32px)); }
+.rules { margin: 16px 0; }
+.rules dt { font-weight: 600; }
+.rules dd { margin: 0 0 12px; font-size: 14px; color: var(--dim); }
+
 .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* ---------- footer ---------- */
@@ -688,13 +738,15 @@ button, input { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   .bar-in { flex-wrap: wrap; gap: 0 16px; padding: 8px 16px 0; }
   .brand { min-height: 44px; display: flex; align-items: center; margin-right: auto; }
+  .who + .who { margin-left: -8px; }
+  .volume { margin-left: 0; }
   .tabs { order: 3; width: 100%; min-height: 44px; margin: 0 -12px; }
   .layout { padding: 16px; gap: 24px; }
   .controls { gap: 12px 16px; }
   .years { min-width: 100%; flex-wrap: wrap; }
   .years-text { min-width: 100%; }
   .tally { margin-left: 0; }
-  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .board, .board.ten { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
   .score { font-size: 22px; }
   .result { bottom: 8px; padding: 12px; }
   .credits { padding: 16px; }

@@ -22,8 +22,8 @@ from pathlib import Path
 
 CACHE = Path("data/cache")
 UA = {"User-Agent": "movie-game-prototype/0.1"}
-MOVIE_MIN_VOTES = 100_000
-GAME_MIN_VOTES = 2_000
+MOVIE_MIN_VOTES = 4_000
+GAME_MIN_VOTES = 100
 FILM_TYPES = "wd:Q11424 wd:Q202866 wd:Q20650540 wd:Q93204 wd:Q29168811"
 
 FILMS_QUERY = """SELECT ?f ?imdb ?title ?score (MIN(YEAR(?date)) AS ?year) WHERE {
@@ -155,9 +155,9 @@ def review_box_scores(titles):
     return known
 
 
-def entry(imdb_id, title, year, rating, metacritic, image):
+def entry(imdb_id, title, year, rating, metacritic, image, votes):
     return {"id": imdb_id, "title": clean_title(title), "year": year, "imdb": rating,
-            "mc": metacritic, "score": round((rating * 10 + metacritic) / 2, 1), "poster": image}
+            "mc": metacritic, "votes": votes, "score": round((rating * 10 + metacritic) / 2, 1), "poster": image}
 
 
 def write(name, variable, items):
@@ -179,7 +179,7 @@ def main():
         if number is None or votes < MOVIE_MIN_VOTES or "year" not in row:
             continue
         film = films.setdefault(row["f"], {"imdb": row["imdb"], "title": row["title"],
-                                           "year": int(row["year"]), "rating": rating, "mc": []})
+                                           "year": int(row["year"]), "rating": rating, "votes": votes, "mc": []})
         film["mc"].append(number)
 
     games = {}
@@ -187,7 +187,7 @@ def main():
         rating, votes = imdb.get(row["imdb"], (0, 0))
         if votes >= GAME_MIN_VOTES and "year" in row:
             games[row["f"]] = {"imdb": row["imdb"], "title": row["title"],
-                               "year": int(row["year"]), "rating": rating, "mc": []}
+                               "year": int(row["year"]), "rating": rating, "votes": votes, "mc": []}
     for row in sparql("games_mc.json", GAMES_MC_QUERY):
         number = metacritic_number(row["score"])
         if number is not None and row["f"] in games:
@@ -205,7 +205,7 @@ def main():
         # Several Metacritic entries (platforms, re-releases) for one title: take the middle one.
         write(name, variable, [
             entry(x["imdb"], x["title"], x["year"], x["rating"],
-                  int(statistics.median_low(x["mc"])), images[x["title"]])
+                  int(statistics.median_low(x["mc"])), images[x["title"]], x["votes"])
             for x in group.values() if images.get(x["title"])])
 
 

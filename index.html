@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ScoreGame</title>
-  <meta name="description" content="Four movies or four games, one hidden score each. Pick the highest or the lowest, name a game from a split second of its theme, or play a friend 1v1.">
+  <meta name="description" content="Name a game or movie from a split second of its theme, pick the highest or lowest rated of four, or take on a friend 1v1.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
@@ -15,11 +15,12 @@
     <div class="bar-in">
       <span class="brand">Score<b>Game</b></span>
       <nav class="tabs" aria-label="What to play">
-        <button class="tab" type="button" data-mode="movies" aria-pressed="true">Movies</button>
+        <button class="tab" type="button" data-mode="themes" aria-pressed="true">Themes</button>
+        <button class="tab" type="button" data-mode="movies" aria-pressed="false">Movies</button>
         <button class="tab" type="button" data-mode="games" aria-pressed="false">Games</button>
-        <button class="tab" type="button" data-mode="themes" aria-pressed="false">Themes</button>
         <button class="tab" type="button" data-mode="duel" aria-pressed="false">1v1</button>
       </nav>
+      <button class="who" id="help" type="button">How to play</button>
       <button class="who" id="who" type="button"></button>
     </div>
   </header>
@@ -27,9 +28,21 @@
   <div class="layout">
     <main class="play">
       <div class="controls">
+        <div class="seg" id="themeSeg" role="group" aria-label="Which themes">
+          <button type="button" data-theme="game" aria-pressed="true">Game themes</button>
+          <button type="button" data-theme="movie" aria-pressed="false">Movie themes</button>
+          <button type="button" data-theme="sound" aria-pressed="false" hidden>Sound effects</button>
+        </div>
+
         <div class="seg" id="targetSeg" role="group" aria-label="Which rating to pick">
           <button type="button" data-target="highest" aria-pressed="true">Highest</button>
           <button type="button" data-target="lowest" aria-pressed="false">Lowest</button>
+        </div>
+
+        <div class="seg" id="depthSeg" role="group" aria-label="How well known the titles are">
+          <button type="button" data-depth="0" aria-pressed="false">Hits</button>
+          <button type="button" data-depth="1" aria-pressed="true">Popular</button>
+          <button type="button" data-depth="2" aria-pressed="false">Everything</button>
         </div>
 
         <div class="years" id="years">
@@ -51,9 +64,12 @@
       <section class="lobby" id="lobby" hidden>
         <h2 id="lobbyTitle"></h2>
         <p id="lobbyText"></p>
-        <div class="seg" id="duelKindSeg" role="group" aria-label="What the match is played with">
-          <button type="button" data-kind="movies" aria-pressed="true">Movies</button>
-          <button type="button" data-kind="games" aria-pressed="false">Games</button>
+        <div class="seg" id="topicSeg" role="group" aria-label="What the match is played with">
+          <button type="button" data-topic="theme:game" aria-pressed="true">Game themes</button>
+          <button type="button" data-topic="theme:movie" aria-pressed="false">Movie themes</button>
+          <button type="button" data-topic="theme:sound" aria-pressed="false" hidden>Sound effects</button>
+          <button type="button" data-topic="movies" aria-pressed="false">Movies</button>
+          <button type="button" data-topic="games" aria-pressed="false">Games</button>
         </div>
         <div class="invite" id="invite" hidden>
           <input id="inviteLink" type="text" readonly aria-label="Room link">
@@ -74,6 +90,7 @@
           <li>0.5s</li><li>1s</li><li>3s</li><li>5s</li><li>10s</li>
         </ol>
         <button class="btn ghost" id="skip" type="button">Skip to 1 second</button>
+        <label class="volume">Volume <input type="range" id="volume" min="0" max="100" step="5"></label>
       </div>
 
       <div class="board" id="board" aria-label="Four to choose from"></div>
@@ -84,21 +101,31 @@
       <div class="result" id="result" hidden>
         <p class="verdict" id="verdict" role="status" aria-live="polite"></p>
         <a class="store" id="store" target="_blank" rel="noopener" hidden>Full track on Apple Music</a>
+        <button class="btn ghost" id="share" type="button" hidden>Copy result</button>
         <button class="btn ghost" id="leaveMatch" type="button" hidden>Leave</button>
         <button class="btn" id="next" type="button">Next four</button>
       </div>
     </main>
 
-    <aside class="side" aria-label="Leaderboard">
-      <section class="panel">
+    <aside class="side">
+      <section class="panel" aria-label="Leaderboard">
         <header class="panel-head">
           <h2>Leaderboard</h2>
           <span class="panel-sub" id="boardName"></span>
         </header>
         <ol class="ranks" id="ranks"></ol>
         <p class="panel-note" id="ranksNote"></p>
-        <button class="btn ghost small" id="ranksRetry" type="button" hidden>Reload scores</button>
+        <button class="btn ghost" id="ranksRetry" type="button" hidden>Reload scores</button>
         <p class="panel-foot" id="ranksScope"></p>
+      </section>
+
+      <section class="panel" aria-label="Your stats">
+        <header class="panel-head"><h2>Your stats</h2></header>
+        <dl class="stats">
+          <div><dt>Rounds played</dt><dd id="statRounds">0</dd></div>
+          <div><dt>Right picks</dt><dd id="statRight">0%</dd></div>
+          <div><dt>1v1 win streak</dt><dd id="statDuel">0</dd></div>
+        </dl>
       </section>
     </aside>
   </div>
@@ -115,6 +142,25 @@
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="nameCancel">Cancel</button>
         <button class="btn" type="submit">Save name</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet wide" id="helpDialog" aria-labelledby="helpTitle">
+    <form method="dialog">
+      <h2 id="helpTitle">How to play</h2>
+      <dl class="rules">
+        <dt>Themes</dt>
+        <dd>Hear half a second of a soundtrack and pick what it comes from. Game themes give you four to choose from, movie themes give you ten. Stuck? Skip to a longer clip: 1, 3, 5, then 10 seconds.</dd>
+        <dt>Movies and Games</dt>
+        <dd>Four titles, each with a hidden score. Pick the highest, or switch to Lowest. Hits, Popular and Everything set how well known the titles are.</dd>
+        <dt>1v1</dt>
+        <dd>Create a room and send the link. You both get the same choices and five lives. A wrong pick, or no pick in time, costs a life. Last one standing wins.</dd>
+        <dt>Keys</dt>
+        <dd>Number keys pick a card (0 is the tenth). Space plays the clip, S skips to a longer one, M mutes. Enter moves on.</dd>
+      </dl>
+      <div class="sheet-actions">
+        <button class="btn" type="submit">Got it</button>
       </div>
     </form>
   </dialog>

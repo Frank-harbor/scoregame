@@ -9,11 +9,15 @@
   const CLIP_SECONDS = [0.5, 1, 3, 5, 10];
   const SMALLEST_POOL = 8;
   const BOARD_ROWS = 10;
-  const DUEL_WIN = 5;
-  const DUEL_SECONDS = 20;
+  const LIVES = 5;
+  const RATED_SECONDS = 20;
+  const THEME_SECONDS = 30;
   const DUEL_PAUSE_MS = 4500;
   const DUEL_GAP = 5;
   const ROOM_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O or 1/I to misread
+  // IMDb votes a title needs at each setting: Hits, Popular, Everything.
+  const DEPTHS = { movies: [100000, 25000, 4000], games: [2000, 500, 100] };
+  const THEME_NAMES = { game: "Game themes", movie: "Movie themes", sound: "Sound effects" };
 
   const $ = (id) => document.getElementById(id);
   const board = $("board");
@@ -23,8 +27,10 @@
   const result = $("result");
   const verdict = $("verdict");
   const store = $("store");
+  const share = $("share");
   const next = $("next");
   const leaveMatch = $("leaveMatch");
+  const tally = $("tally");
   const streakEl = $("streak");
   const bestEl = $("best");
   const leftLabel = $("leftLabel");
@@ -35,14 +41,19 @@
   const yearsText = $("yearsText");
   const rangeFill = $("rangeFill");
   const targetSeg = $("targetSeg");
+  const depthSeg = $("depthSeg");
+  const themeSeg = $("themeSeg");
   const timer = $("timer");
   const player = $("player");
   const playButton = $("play");
   const skipButton = $("skip");
+  const volume = $("volume");
   const stageDots = [...$("stages").children];
   const tabs = [...document.querySelectorAll("[data-mode]")];
   const targetButtons = [...document.querySelectorAll("[data-target]")];
-  const kindButtons = [...document.querySelectorAll("[data-kind]")];
+  const depthButtons = [...document.querySelectorAll("[data-depth]")];
+  const themeButtons = [...document.querySelectorAll("[data-theme]")];
+  const topicButtons = [...document.querySelectorAll("[data-topic]")];
   const who = $("who");
   const nameDialog = $("nameDialog");
   const nameInput = $("nameInput");
@@ -52,16 +63,30 @@
   const audio = new Audio();
   audio.preload = "auto";
 
-  const lists = { movies: window.SG_MOVIES, games: window.SG_GAMES, themes: window.SG_THEMES };
+  // Sound effects join the theme clips once a data/sounds.js exists. Until then that option stays hidden.
+  const clips = [
+    ...(Array.isArray(window.SG_THEMES) ? window.SG_THEMES : []),
+    ...(Array.isArray(window.SG_SOUNDS) ? window.SG_SOUNDS.map((s) => ({ ...s, kind: "sound" })) : []),
+  ];
+  const lists = {
+    movies: window.SG_MOVIES,
+    games: window.SG_GAMES,
+    game: clips.filter((c) => c.kind === "game"),
+    movie: clips.filter((c) => c.kind === "movie"),
+    sound: clips.filter((c) => c.kind === "sound"),
+  };
+  const themeKinds = ["game", "movie", "sound"].filter((k) => lists[k].length >= SMALLEST_POOL);
   const roomInLink = new URLSearchParams(location.search).get("room");
 
-  let mode = ["movies", "games", "themes", "duel"].includes(load("mode")) ? load("mode") : "movies";
+  let mode = ["themes", "movies", "games", "duel"].includes(load("mode")) ? load("mode") : "themes";
   if (roomInLink) mode = "duel";
   let target = load("target") === "lowest" ? "lowest" : "highest";
+  let depth = [0, 1, 2].includes(Number(load("depth") ?? 1)) ? Number(load("depth") ?? 1) : 1;
+  let themeKind = themeKinds.includes(load("theme")) ? load("theme") : themeKinds[0] || "game";
   let range = { from: Number(load("from")) || 0, to: Number(load("to")) || 9999 };
   let playerName = (load("name") || "").slice(0, 16);
+  let stats = readJson("stats", { rounds: 0, right: 0 });
   let askedForName = false;
-  let pendingScore = null;
   let pool = [];
   let streak = 0;
   let best = 0;
@@ -91,16 +116,35 @@
     } catch {}
   }
 
-  const solo = () => mode !== "duel";
-  const rated = () => mode !== "themes";
-  const listKind = () => (mode === "duel" ? Duel.kind : mode);
-  const boardKey = () => (rated() ? `${listKind()}.${target}` : "themes");
+  function readJson(key, fallback) {
+    try {
+      const value = JSON.parse(load(key));
+      return value && typeof value === "object" ? value : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  // What is on the table right now: a rated list ("movies", "games") or a clip list ("game", "movie", "sound").
+  const topic = () => (mode === "duel" ? Duel.topic : mode === "themes" ? `theme:${themeKind}` : mode);
+  const rated = () => !topic().startsWith("theme:");
+  const listKind = () => topic().replace("theme:", "");
+  const boardKey = () => (mode === "duel" ? "duel" : rated() ? `${listKind()}.${target}` : `themes.${listKind()}`);
+  // Movie themes are the hard mode: ten to choose from where everything else has four.
+  const choices = () => (topic() === "theme:movie" ? 10 : 4);
   const fmt = (score) => score.toFixed(1);
   const seconds = (n) => (n === 1 ? "1 second" : `${n} seconds`);
   const firstWord = (title) => title.toLowerCase().replace(/^the\s+/, "").split(/[\s:]/)[0];
   const winnerLabel = () => (target === "lowest" ? "Lowest" : "Highest");
   const press = (buttons, key, value) =>
-    buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[key] === value)));
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[key] === String(value))));
+
+  function boardLabel(key) {
+    if (key === "duel") return "1v1 · Win streak";
+    const [what, which] = key.split(".");
+    if (what === "themes") return THEME_NAMES[which];
+    return `${what[0].toUpperCase()}${what.slice(1)} · ${which[0].toUpperCase()}${which.slice(1)}`;
+  }
 
   function setTally(el, value) {
     if (el.textContent === String(value)) return;
@@ -108,6 +152,29 @@
     el.classList.remove("bump");
     void el.offsetWidth; // restart the pop
     el.classList.add("bump");
+  }
+
+  // Lives are drawn as five pips, filled ones first.
+  function setLives(el, left) {
+    el.replaceChildren(...Array.from({ length: LIVES }, (_, i) => {
+      const pip = document.createElement("span");
+      pip.className = i < left ? "pip" : "pip spent";
+      return pip;
+    }));
+    el.setAttribute("aria-label", `${left} of ${LIVES} lives`);
+  }
+
+  function countRound(right) {
+    stats.rounds += 1;
+    if (right) stats.right += 1;
+    save("stats", JSON.stringify(stats));
+    showStats();
+  }
+
+  function showStats() {
+    $("statRounds").textContent = stats.rounds.toLocaleString("en");
+    $("statRight").textContent = stats.rounds ? `${Math.round((stats.right / stats.rounds) * 100)}%` : "0%";
+    $("statDuel").textContent = Number(load("duel.streak")) || 0;
   }
 
   /* ---------- choosing a round ---------- */
@@ -148,18 +215,24 @@
     return picks.map((i) => pool[i]);
   }
 
-  function drawThemeRound() {
+  function drawClipRound() {
     refillUnseen();
     const at = Math.floor(Math.random() * unseen.length);
     answer = pool[unseen.splice(at, 1)[0]];
     // Wrong answers come from other series, so "Halo" never sits next to "Halo 2".
     const others = pool.filter((g) => firstWord(g.title) !== firstWord(answer.title));
     const four = [answer];
-    for (let guard = 0; four.length < 4 && guard < 500; guard++) {
+    for (let guard = 0; four.length < choices() && guard < 2000; guard++) {
       const g = others[Math.floor(Math.random() * others.length)];
       if (!four.some((f) => firstWord(f.title) === firstWord(g.title))) four.push(g);
     }
     return four.sort(() => Math.random() - 0.5);
+  }
+
+  function buildPool() {
+    const list = lists[listKind()];
+    if (!rated()) return list;
+    return showYears(list.filter((m) => m.votes >= DEPTHS[listKind()][depth]));
   }
 
   /* ---------- pictures and clips ---------- */
@@ -199,10 +272,11 @@
     playButton.classList.remove("playing");
   }
 
-  // Plays the clip from the start. A length of 0 lets it run to the end.
+  // Plays from the clip's marked start, its loudest stretch. A length of 0 runs to the end.
   function playClip(length) {
+    if (!answer) return;
     stopClip();
-    audio.currentTime = 0;
+    audio.currentTime = answer.start || 0;
     audio.play().then(() => {
       if (!length) return;
       playButton.style.setProperty("--clip", `${length}s`);
@@ -224,6 +298,19 @@
     const last = stage === CLIP_SECONDS.length - 1;
     skipButton.hidden = last;
     if (!last) skipButton.textContent = `Skip to ${seconds(CLIP_SECONDS[stage + 1])}`;
+  }
+
+  function longerClip() {
+    if (player.hidden || skipButton.disabled || stage >= CLIP_SECONDS.length - 1) return;
+    stage += 1;
+    showStage();
+    playClip(CLIP_SECONDS[stage]);
+  }
+
+  function setVolume(level) {
+    audio.volume = Math.min(1, Math.max(0, level));
+    volume.value = Math.round(audio.volume * 100);
+    save("volume", audio.volume);
   }
 
   /* ---------- the four cards ---------- */
@@ -277,9 +364,10 @@
     await Promise.all(items.map((m) => preload(m.poster)));
     if (thisDeal !== dealNumber) return false;
     round = items;
-    if (tickets.length === 0) {
-      tickets = [0, 1, 2, 3].map(buildTicket);
-      board.append(...tickets);
+    if (tickets.length !== items.length) {
+      tickets = items.map((_, i) => buildTicket(i));
+      board.replaceChildren(...tickets);
+      board.classList.toggle("ten", items.length > 4);
     }
     notice.hidden = true;
     tickets.forEach((t, i) => fillTicket(t, round[i], scored));
@@ -294,7 +382,7 @@
 
   function hideTable() {
     picking = false;
-    counting.forEach(stopCounting); // a fast "Next four" can land mid count-up
+    counting.forEach(stopCounting); // a fast click on next can land mid count-up
     tickets.forEach((t) => {
       t.disabled = true;
       t.classList.add("dealing");
@@ -302,29 +390,33 @@
     return ++dealNumber;
   }
 
+  function readyClipControls(on) {
+    playButton.disabled = !on;
+    skipButton.disabled = !on;
+    if (on) {
+      stage = 0;
+      showStage();
+    }
+  }
+
   async function deal() {
     result.hidden = true;
-    store.hidden = true;
     stopClip();
     const thisDeal = hideTable();
 
     if (rated()) return layOut(drawRatedRound(soloGap()), true, thisDeal);
 
-    playButton.disabled = true;
-    skipButton.disabled = true;
-    // A clip that will not load is swapped for another game, a few times over.
+    readyClipControls(false);
+    // A clip that will not load is swapped for another title, a few times over.
     let four;
     for (let attempt = 0; ; attempt++) {
-      four = drawThemeRound();
+      four = drawClipRound();
       const ready = await loadClip(answer.preview);
       if (thisDeal !== dealNumber) return;
       if (ready) break;
-      if (attempt === 3) return fail("The theme clips are not loading. Check your connection and try again.");
+      if (attempt === 3) return fail("The clips are not loading. Check your connection and try again.");
     }
-    stage = 0;
-    showStage();
-    playButton.disabled = false;
-    skipButton.disabled = false;
+    readyClipControls(true);
     layOut(four, false, thisDeal);
   }
 
@@ -372,14 +464,21 @@
         ticket.setAttribute("aria-label", `${item.title}, ${item.year}, score ${fmt(item.score)}`);
         countUp(ticket.querySelector(".score"), item.score);
       } else if (item === winner) {
-        ticket.querySelector(".sources").textContent = `${item.track}, ${item.artist}`;
+        ticket.querySelector(".sources").textContent = item.artist ? `${item.track}, ${item.artist}` : item.track || "";
       }
     });
+    if (!scored) {
+      store.hidden = !winner.link;
+      if (winner.link) store.href = winner.link;
+      playButton.disabled = true;
+      skipButton.disabled = true;
+      playClip(0); // the rest of the clip, as the payoff
+    }
   }
 
   function pick(index) {
     if (!picking) return;
-    if (!solo()) return Duel.pick(index);
+    if (mode === "duel") return Duel.pick(index);
     picking = false;
 
     const winner = rated() ? ranked(round)[0] : answer;
@@ -389,7 +488,9 @@
       ...(item === winner ? [{ text: rated() ? winnerLabel() : "The answer", tone: "win" }] : []),
       ...(i === index ? [{ text: "Your pick", tone: right ? "good" : "bad" }] : []),
     ]);
+    store.hidden = true;
     revealTable(winner, index, marks, rated());
+    countRound(right);
 
     if (right) {
       streak += 1;
@@ -397,6 +498,11 @@
         best = streak;
         save(`best.${boardKey()}`, best);
       }
+      // Saved after every right pick, so closing the tab mid-run loses nothing.
+      save(`run.${boardKey()}`, streak);
+      if (playerName) Ranks.submit(boardKey(), playerName, streak);
+    } else {
+      save(`run.${boardKey()}`, 0);
     }
     if (rated()) {
       const word = target === "lowest" ? "is lowest on" : "leads on";
@@ -408,27 +514,26 @@
       verdict.textContent = right
         ? `Right. ${winner.title}, from ${seconds(CLIP_SECONDS[stage])}.`
         : `Streak over at ${streak}. That was ${winner.title}.`;
-      store.href = winner.link;
-      store.hidden = false;
-      playButton.disabled = true;
-      skipButton.disabled = true;
-      playClip(0); // the full preview, as the payoff
     }
-    next.textContent = right ? "Next four" : "Play again";
+    next.textContent = right ? "Next round" : "Play again";
     next.hidden = false;
     leaveMatch.hidden = true;
+    share.hidden = right || streak === 0;
     lost = !right;
     verdict.className = right ? "verdict is-right" : "verdict is-wrong";
     setTally(streakEl, streak);
     setTally(bestEl, best);
-    if (lost && streak > 0) recordRun(boardKey(), streak);
+    if (lost && streak > 0 && !playerName && !askedForName) {
+      askedForName = true;
+      askName();
+    }
 
     result.hidden = false;
     next.focus({ preventScroll: true });
   }
 
   function advance() {
-    if (!solo()) return Duel.rematch();
+    if (mode === "duel") return Duel.rematch();
     if (lost) {
       lost = false;
       streak = 0;
@@ -453,20 +558,20 @@
     },
 
     onDevice(key) {
-      try {
-        const rows = JSON.parse(load(`ranks.${key}`) || "[]");
-        return Array.isArray(rows) ? rows : [];
-      } catch {
-        return [];
-      }
+      const rows = readJson(`ranks.${key}`, []);
+      return Array.isArray(rows) ? rows : [];
     },
 
-    // Each name keeps its best run only.
+    // Each name keeps its best only. Returns true when this score is a new best for the name.
     keepOnDevice(key, name, score) {
-      const rows = this.onDevice(key).filter((r) => r.name !== name || r.score > score);
-      if (!rows.some((r) => r.name === name)) rows.push({ name, score });
+      const before = this.onDevice(key);
+      const old = before.find((r) => r.name === name);
+      if (old && old.score >= score) return false;
+      const rows = before.filter((r) => r.name !== name);
+      rows.push({ name, score });
       rows.sort((a, b) => b.score - a.score);
       save(`ranks.${key}`, JSON.stringify(rows.slice(0, 50)));
+      return true;
     },
 
     async top(key) {
@@ -479,16 +584,27 @@
     },
 
     async submit(key, name, score) {
-      this.keepOnDevice(key, name, score);
-      if (this.shared) {
+      if (!name || score < 1) return;
+      const improved = this.keepOnDevice(key, name, score);
+      if (improved && this.shared) {
         // The database keeps whichever is higher, so an off day never lowers a best.
         await fetch(`${CONFIG.supabaseUrl}/rest/v1/rpc/submit_score`, {
           method: "POST",
           headers: this.headers(),
           body: JSON.stringify({ p_board: key, p_name: name, p_score: score }),
+          keepalive: true, // still sent if the tab is closing
         }).catch(() => {});
       }
-      if (this.showing === key) this.show(key);
+      if (improved && this.showing === key) this.show(key);
+    },
+
+    // A name set after playing claims every best already earned on this device.
+    claimBests(name) {
+      for (const key of ["movies.highest", "movies.lowest", "games.highest", "games.lowest",
+        "themes.game", "themes.movie", "themes.sound"]) {
+        this.submit(key, name, Number(load(`best.${key}`)) || 0);
+      }
+      this.submit("duel", name, Number(load("duel.best")) || 0);
     },
 
     async show(key) {
@@ -496,13 +612,10 @@
       const mine = ++this.request;
       const list = $("ranks");
       const note = $("ranksNote");
-      const [what, which] = key.split(".");
-      $("boardName").textContent = which
-        ? `${what[0].toUpperCase()}${what.slice(1)} · ${which[0].toUpperCase()}${which.slice(1)}`
-        : "Themes";
+      $("boardName").textContent = boardLabel(key);
       $("ranksScope").textContent = this.shared
-        ? "Best streaks from everyone who has played."
-        : "Best streaks on this device.";
+        ? "Bests from everyone who has played. Saved as you play."
+        : "Bests on this device. Saved as you play.";
       $("ranksRetry").hidden = true;
       if (this.shared) {
         list.replaceChildren();
@@ -522,7 +635,9 @@
       }
       if (mine !== this.request) return;
       note.hidden = rows.length > 0;
-      note.textContent = "No scores yet. Finish a run of 1 or more to get on the board.";
+      note.textContent = key === "duel"
+        ? "No scores yet. Win a 1v1 match to get on the board."
+        : "No scores yet. Get one right to get on the board.";
       list.replaceChildren(...rows.map((row, i) => {
         const li = document.createElement("li");
         if (row.name === playerName) li.className = "me";
@@ -537,14 +652,6 @@
     },
   };
 
-  function recordRun(key, score) {
-    if (playerName) return Ranks.submit(key, playerName, score);
-    if (askedForName) return;
-    askedForName = true;
-    pendingScore = { key, score };
-    askName();
-  }
-
   function showName() {
     who.textContent = playerName ? `Playing as ${playerName}` : "Set your name";
   }
@@ -558,7 +665,7 @@
   /* ---------- years ---------- */
 
   function showYears(list) {
-    const all = list.map((m) => m.year);
+    const all = lists[listKind()].map((m) => m.year);
     const lo = Math.min(...all);
     const hi = Math.max(...all);
     const from = Math.min(Math.max(range.from, lo), hi);
@@ -578,7 +685,8 @@
     const span = Number(yearFrom.max) - lo || 1;
     const from = Number(yearFrom.value);
     const to = Number(yearTo.value);
-    const count = lists[listKind()].filter((m) => m.year >= from && m.year <= to).length;
+    const floor = DEPTHS[listKind()][depth];
+    const count = lists[listKind()].filter((m) => m.votes >= floor && m.year >= from && m.year <= to).length;
     yearsText.textContent =
       `${from === to ? from : `${from} to ${to}`} · ${count.toLocaleString("en")} ${listKind()}`;
     rangeFill.style.left = `${((from - lo) / span) * 100}%`;
@@ -594,29 +702,34 @@
     paintYears();
   }
 
-  function onYearChange() {
-    range = { from: Number(yearFrom.value), to: Number(yearTo.value) };
-    save("from", range.from);
-    save("to", range.to);
-    start();
+  function lockControls(locked) {
+    for (const el of [...targetButtons, ...depthButtons, ...themeButtons, yearFrom, yearTo]) el.disabled = locked;
   }
 
-  function lockControls(locked) {
-    for (const el of [...targetButtons, yearFrom, yearTo]) el.disabled = locked;
+  // Shows the controls that mean something for what is being played.
+  function showControls() {
+    const clip = !rated();
+    themeSeg.hidden = mode !== "themes" || themeKinds.length < 2;
+    targetSeg.hidden = clip;
+    depthSeg.hidden = clip;
+    years.hidden = clip;
+    press(targetButtons, "target", target);
+    press(depthButtons, "depth", depth);
+    press(themeButtons, "theme", themeKind);
   }
 
   /* ---------- 1v1 ---------- */
 
   const Duel = {
-    kind: load("duelKind") === "games" ? "games" : "movies",
+    topic: load("duelTopic") || "theme:game",
     state: "idle", // idle | waiting | joining | playing
     peer: null,
     conn: null,
     host: false,
     code: "",
     theirName: "Your friend",
-    me: 0,
-    them: 0,
+    mine: LIVES,
+    theirs: LIVES,
     n: 0,
     open: false,
     myPick: null,
@@ -624,45 +737,55 @@
     roundTimer: 0,
     nextTimer: 0,
     over: false,
+    usedLink: false,
 
     show(title, text, parts) {
       lobby.hidden = false;
       ask.hidden = true;
       timer.hidden = true;
       result.hidden = true;
+      player.hidden = true;
+      stopClip();
       clearBoard();
       $("lobbyTitle").textContent = title;
       $("lobbyText").textContent = text;
-      $("duelKindSeg").hidden = !parts.setup;
+      $("topicSeg").hidden = !parts.setup;
       $("createRoom").hidden = !parts.setup;
       $("invite").hidden = !parts.invite;
       $("leaveRoom").hidden = !parts.leave;
       $("leaveRoom").textContent = parts.leave || "";
-      targetSeg.hidden = !parts.setup;
-      years.hidden = !parts.setup;
-      $("tally").hidden = true;
+      tally.hidden = true;
       lockControls(false);
       if (parts.setup) {
-        press(kindButtons, "kind", this.kind);
-        press(targetButtons, "target", target);
-        showYears(lists[this.kind]);
+        press(topicButtons, "topic", this.topic);
+        showControls();
+        if (rated()) buildPool();
+      } else {
+        targetSeg.hidden = true;
+        depthSeg.hidden = true;
+        years.hidden = true;
       }
+      themeSeg.hidden = true;
     },
 
     setup(problem) {
       this.state = "idle";
+      const streakNow = Number(load("duel.streak")) || 0;
       this.show(
         problem ? "Match ended" : "Play a friend",
-        problem || `You both get the same four and pick at the same time. A right pick is a point. First to ${DUEL_WIN} wins.`,
+        problem || `Pick a topic and send the link. You both get the same choices and ${LIVES} lives. ` +
+          `A wrong pick costs a life, and the last one standing wins.` +
+          (streakNow ? ` Your win streak is ${streakNow}.` : ""),
         { setup: true }
       );
-      Ranks.show(boardKey());
+      Ranks.show("duel");
     },
 
     enter() {
       if (!Array.isArray(lists.movies) || !Array.isArray(lists.games)) {
         return fail("The movie and game lists did not load. Check your connection and try again.");
       }
+      if (!rated() && !themeKinds.includes(listKind())) this.topic = themeKinds[0] ? `theme:${themeKinds[0]}` : "movies";
       if (this.state !== "idle") return;
       if (roomInLink && !this.usedLink) {
         this.usedLink = true;
@@ -673,7 +796,7 @@
 
     create() {
       if (!window.Peer) return this.setup("1v1 could not load its connection service. Refresh the page and try again.");
-      if (showYears(lists[this.kind]).length < SMALLEST_POOL) {
+      if (buildPool().length < SMALLEST_POOL) {
         return this.setup("Too few titles in those years for a match. Widen the range.");
       }
       this.host = true;
@@ -718,7 +841,14 @@
         if (!this.host) this.send({ t: "hello", name: playerName });
       });
       conn.on("data", (message) => this.receive(message));
-      conn.on("close", () => this.fall(`${this.theirName} left the match.`));
+      conn.on("close", () => {
+        // Walking out of a live match hands the win to whoever stayed.
+        const forfeit = this.state === "playing" && !this.over;
+        if (forfeit) this.won();
+        this.fall(forfeit
+          ? `${this.theirName} left, so the match is yours. Win streak ${Number(load("duel.streak")) || 0}.`
+          : `${this.theirName} left.`);
+      });
     },
 
     send(message) {
@@ -729,30 +859,33 @@
       if (!m || typeof m !== "object") return;
       if (m.t === "hello" && this.host) {
         this.theirName = String(m.name || "Your friend").slice(0, 16);
-        this.send({ t: "hello", name: playerName, kind: this.kind, target, from: Number(yearFrom.value), to: Number(yearTo.value) });
+        this.send({ t: "hello", name: playerName, topic: this.topic, target, depth,
+          from: Number(yearFrom.value), to: Number(yearTo.value) });
         this.begin();
       } else if (m.t === "hello") {
+        // The host's choices apply for this match only; nothing here is saved.
         this.theirName = String(m.name || "Your friend").slice(0, 16);
-        this.kind = m.kind === "games" ? "games" : "movies";
-        target = m.target === "lowest" ? "lowest" : "highest"; // the host's choice, for this match only
+        this.topic = ["movies", "games", "theme:game", "theme:movie", "theme:sound"].includes(m.topic) ? m.topic : "movies";
+        target = m.target === "lowest" ? "lowest" : "highest";
+        depth = [0, 1, 2].includes(m.depth) ? m.depth : 1;
         range = { from: Number(m.from) || 0, to: Number(m.to) || 9999 };
         this.begin();
       } else if (m.t === "round" && !this.host) {
-        const byId = new Map(lists[this.kind].map((item) => [item.id, item]));
+        const byId = new Map(lists[listKind()].map((item) => [item.id, item]));
         const items = (m.ids || []).map((id) => byId.get(id));
-        if (items.length !== 4 || items.some((item) => !item)) {
+        if (items.length !== choices() || items.some((item) => !item)) {
           return this.fall("Your two copies of the game are out of step. Both refresh the page and try again.");
         }
-        this.showRound(m.n, items);
+        this.showRound(m.n, items, byId.get(m.answer));
       } else if (m.t === "pick" && this.host) {
         if (m.n !== this.n || !this.open || this.theirPick !== null) return;
-        this.theirPick = [0, 1, 2, 3].includes(m.index) ? m.index : null;
+        this.theirPick = Number.isInteger(m.index) && m.index >= 0 && m.index < round.length ? m.index : null;
         if (this.myPick !== null) this.settle();
       } else if (m.t === "reveal" && !this.host) {
         if (m.n !== this.n) return;
-        this.me = m.guestScore;
-        this.them = m.hostScore;
-        this.reveal(m.guest, m.host, m.over);
+        this.mine = m.guestLives;
+        this.theirs = m.hostLives;
+        this.reveal(m.guest, m.host, m.over, m.spared);
       } else if (m.t === "rematch" && this.host) {
         if (this.over) this.again();
       } else if (m.t === "again" && !this.host) {
@@ -762,54 +895,67 @@
 
     begin() {
       this.state = "playing";
-      this.me = 0;
-      this.them = 0;
+      this.mine = LIVES;
+      this.theirs = LIVES;
       this.n = 0;
       this.over = false;
       lobby.hidden = true;
-      targetSeg.hidden = false;
-      years.hidden = false;
-      $("tally").hidden = false;
-      press(targetButtons, "target", target);
-      pool = showYears(lists[this.kind]);
+      showControls();
+      themeSeg.hidden = true;
+      tally.hidden = false;
+      pool = buildPool();
       unseen = [];
       lockControls(true);
       leftLabel.textContent = "You";
       rightLabel.textContent = this.theirName;
-      streakEl.textContent = 0;
-      bestEl.textContent = 0;
-      Ranks.show(boardKey());
+      setLives(streakEl, this.mine);
+      setLives(bestEl, this.theirs);
+      player.hidden = rated();
+      readyClipControls(false);
+      Ranks.show("duel"); // the joining player never saw the lobby, so the panel is still empty
       result.hidden = true;
       notice.hidden = false;
-      notice.textContent = this.host ? "Dealing the first four." : `Waiting for ${this.theirName} to deal.`;
+      notice.textContent = this.host ? "Dealing the first round." : `Waiting for ${this.theirName} to deal.`;
       if (this.host) this.nextRound();
     },
 
     nextRound() {
-      const items = drawRatedRound(DUEL_GAP);
-      this.send({ t: "round", n: this.n + 1, ids: items.map((item) => item.id) });
-      this.showRound(this.n + 1, items);
+      const items = rated() ? drawRatedRound(DUEL_GAP) : drawClipRound();
+      this.send({ t: "round", n: this.n + 1, ids: items.map((item) => item.id), answer: rated() ? null : answer.id });
+      this.showRound(this.n + 1, items, answer);
     },
 
-    async showRound(n, items) {
+    async showRound(n, items, clipAnswer) {
       this.n = n;
       this.open = false;
       this.myPick = null;
       this.theirPick = null;
       clearTimeout(this.roundTimer);
+      stopClip();
       result.hidden = true;
       ask.hidden = false;
-      ask.textContent = `Round ${n}. Which of these four is rated ${target}?`;
-      const shown = await layOut(items, true, hideTable());
+      ask.textContent = rated()
+        ? `Round ${n}. Which of these four is rated ${target}?`
+        : `Round ${n}. Which one is this from?`;
+      const thisDeal = hideTable();
+      if (!rated()) {
+        answer = clipAnswer;
+        readyClipControls(false);
+        await loadClip(answer.preview);
+        if (thisDeal !== dealNumber) return;
+        readyClipControls(true);
+      }
+      const shown = await layOut(items, rated(), thisDeal);
       if (!shown) return;
+      const allowed = rated() ? RATED_SECONDS : THEME_SECONDS;
       this.open = true;
       timer.hidden = false;
-      timer.style.setProperty("--time", `${DUEL_SECONDS}s`);
+      timer.style.setProperty("--time", `${allowed}s`);
       timer.classList.remove("running");
       void timer.offsetWidth; // restart the countdown bar
       timer.classList.add("running");
-      // The host calls time. A small allowance covers the other side still loading posters.
-      if (this.host) this.roundTimer = setTimeout(() => this.settle(), (DUEL_SECONDS + 2) * 1000);
+      // The host calls time. A small allowance covers the other side still loading.
+      if (this.host) this.roundTimer = setTimeout(() => this.settle(), (allowed + 2) * 1000);
     },
 
     pick(index) {
@@ -826,47 +972,73 @@
       if (this.host && this.theirPick !== null) this.settle();
     },
 
+    winner() {
+      return rated() ? ranked(round)[0] : answer;
+    },
+
     // Host only: both picks are in, or time is up.
     settle() {
       if (!this.open) return;
       clearTimeout(this.roundTimer);
-      const winner = ranked(round)[0];
-      if (round[this.myPick] === winner) this.me += 1;
-      if (round[this.theirPick] === winner) this.them += 1;
-      const over = (this.me >= DUEL_WIN || this.them >= DUEL_WIN) && this.me !== this.them;
+      const winner = this.winner();
+      if (round[this.myPick] !== winner) this.mine -= 1;
+      if (round[this.theirPick] !== winner) this.theirs -= 1;
+      // Both out on the same round is no way to end a match: both keep their last life.
+      const spared = this.mine <= 0 && this.theirs <= 0;
+      if (spared) {
+        this.mine = 1;
+        this.theirs = 1;
+      }
+      const over = this.mine <= 0 || this.theirs <= 0;
       this.send({ t: "reveal", n: this.n, host: this.myPick, guest: this.theirPick,
-        hostScore: this.me, guestScore: this.them, over });
-      this.reveal(this.myPick, this.theirPick, over);
+        hostLives: this.mine, guestLives: this.theirs, over, spared });
+      this.reveal(this.myPick, this.theirPick, over, spared);
     },
 
-    reveal(mine, theirs, over) {
+    won() {
+      const now = (Number(load("duel.streak")) || 0) + 1;
+      save("duel.streak", now);
+      if (now > (Number(load("duel.best")) || 0)) save("duel.best", now);
+      if (playerName) Ranks.submit("duel", playerName, now);
+      showStats();
+      return now;
+    },
+
+    reveal(mine, theirs, over, spared) {
       this.open = false;
       this.over = over;
       timer.hidden = true;
       timer.classList.remove("running");
       notice.hidden = true;
-      const winner = ranked(round)[0];
+      const winner = this.winner();
       const iScored = round[mine] === winner;
       const theyScored = round[theirs] === winner;
       const marks = round.map((item, i) => [
-        ...(item === winner ? [{ text: winnerLabel(), tone: "win" }] : []),
+        ...(item === winner ? [{ text: rated() ? winnerLabel() : "The answer", tone: "win" }] : []),
         ...(i === mine ? [{ text: "You", tone: iScored ? "good" : "bad" }] : []),
         ...(i === theirs ? [{ text: this.theirName, tone: "them" }] : []),
       ]);
-      revealTable(winner, mine, marks, true);
-      setTally(streakEl, this.me);
-      setTally(bestEl, this.them);
-
-      const roundLine = iScored && theyScored ? "You both got it."
-        : iScored ? `You got it. ${this.theirName} missed.`
-        : theyScored ? `${this.theirName} got it. You missed.`
-        : "Nobody got it.";
-      const won = this.me > this.them;
-      verdict.textContent = over
-        ? `${won ? "You win" : `${this.theirName} wins`} ${Math.max(this.me, this.them)} to ${Math.min(this.me, this.them)}.`
-        : roundLine;
-      verdict.className = (over ? won : iScored) ? "verdict is-right" : "verdict is-wrong";
       store.hidden = true;
+      revealTable(winner, mine, marks, rated());
+      countRound(iScored);
+      setLives(streakEl, this.mine);
+      setLives(bestEl, this.theirs);
+
+      let line = iScored && theyScored ? "You both got it."
+        : iScored ? `You got it. ${this.theirName} loses a life.`
+        : theyScored ? `${this.theirName} got it. You lose a life.`
+        : "Nobody got it. You both lose a life.";
+      if (spared) line = "Nobody got it on your last lives, so you both keep one.";
+      const iWon = over && this.mine > 0;
+      if (over && iWon) line = `You win with ${this.mine} ${this.mine === 1 ? "life" : "lives"} left. Win streak ${this.won()}.`;
+      if (over && !iWon) {
+        save("duel.streak", 0);
+        showStats();
+        line = `${this.theirName} wins. Your win streak is back to 0.`;
+      }
+      verdict.textContent = line;
+      verdict.className = (over ? iWon : iScored) ? "verdict is-right" : "verdict is-wrong";
+      share.hidden = true;
       next.hidden = !over;
       next.textContent = "Rematch";
       leaveMatch.hidden = !over;
@@ -901,11 +1073,14 @@
       if (roomInLink) history.replaceState(null, "", location.pathname);
     },
 
-    // The match or room ended for a reason the player should read.
+    // The match or room ended. Puts this player's own settings back and returns to the lobby.
     fall(reason) {
       if (this.state === "idle") return;
       this.close();
+      stopClip();
+      this.topic = load("duelTopic") || "theme:game";
       target = load("target") === "lowest" ? "lowest" : "highest";
+      depth = [0, 1, 2].includes(Number(load("depth") ?? 1)) ? Number(load("depth") ?? 1) : 1;
       range = { from: Number(load("from")) || 0, to: Number(load("to")) || 9999 };
       leftLabel.textContent = "Streak";
       rightLabel.textContent = "Best";
@@ -913,6 +1088,10 @@
     },
 
     leave() {
+      if (this.state === "playing" && !this.over) {
+        save("duel.streak", 0); // walking out counts as a loss
+        showStats();
+      }
       this.fall("");
     },
   };
@@ -935,7 +1114,6 @@
     press(tabs, "mode", mode);
     clearBoard();
     stopClip();
-    streak = 0;
     lost = false;
     unseen = [];
     result.hidden = true;
@@ -949,15 +1127,14 @@
     if (mode === "duel") return Duel.enter();
     Duel.leave();
 
-    const list = lists[mode];
-    targetSeg.hidden = !rated();
-    years.hidden = !rated() || !Array.isArray(list);
-    $("tally").hidden = false;
+    const list = lists[listKind()];
+    showControls();
+    tally.hidden = false;
     lockControls(false);
     leftLabel.textContent = "Streak";
     rightLabel.textContent = "Best";
-    press(targetButtons, "target", target);
     best = Number(load(`best.${boardKey()}`)) || 0;
+    streak = Number(load(`run.${boardKey()}`)) || 0; // a run left unfinished carries on
     streakEl.textContent = streak;
     bestEl.textContent = best;
     Ranks.show(boardKey());
@@ -965,18 +1142,27 @@
     if (!Array.isArray(list) || list.length < 4) {
       return fail(`The ${mode} list did not load. Check your connection and try again.`);
     }
-    pool = rated() ? showYears(list) : list;
-    if (pool.length < SMALLEST_POOL) {
+    pool = buildPool();
+    if (pool.length < Math.max(SMALLEST_POOL, choices() + 2)) {
       notice.hidden = false;
       notice.textContent = `Only ${pool.length} ${mode} in those years. Widen the range to play.`;
       return;
     }
     player.hidden = rated();
     ask.hidden = false;
-    ask.textContent = rated() ? `Which of these four is rated ${target}?` : "Which game is this theme from?";
+    ask.textContent = rated() ? `Which of these four is rated ${target}?`
+      : themeKind === "sound" ? "Which game is this sound from?"
+      : themeKind === "movie" ? "Which of these ten movies is this theme from?"
+      : "Which game is this theme from?";
     notice.hidden = false;
     notice.textContent = rated() ? "Dealing the next four." : "Loading the clip.";
     deal();
+  }
+
+  // Changing a setting in the 1v1 lobby only updates the lobby. Everywhere else it restarts the run.
+  function settingChanged() {
+    if (mode !== "duel") return start();
+    if (Duel.state === "idle") Duel.setup();
   }
 
   next.addEventListener("click", advance);
@@ -992,67 +1178,100 @@
     if (b.dataset.target === target) return;
     target = b.dataset.target;
     save("target", target);
-    if (mode === "duel") {
-      press(targetButtons, "target", target);
-      return Ranks.show(boardKey());
-    }
+    settingChanged();
+  }));
+  depthButtons.forEach((b) => b.addEventListener("click", () => {
+    if (Number(b.dataset.depth) === depth) return;
+    depth = Number(b.dataset.depth);
+    save("depth", depth);
+    settingChanged();
+  }));
+  themeButtons.forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.theme === themeKind) return;
+    themeKind = b.dataset.theme;
+    save("theme", themeKind);
     start();
   }));
-  kindButtons.forEach((b) => b.addEventListener("click", () => {
-    Duel.kind = b.dataset.kind;
-    save("duelKind", Duel.kind);
+  topicButtons.forEach((b) => b.addEventListener("click", () => {
+    Duel.topic = b.dataset.topic;
+    save("duelTopic", Duel.topic);
     Duel.setup();
   }));
   for (const input of [yearFrom, yearTo]) {
     input.addEventListener("input", onYearInput);
     input.addEventListener("change", () => {
-      if (mode !== "duel") return onYearChange();
       range = { from: Number(yearFrom.value), to: Number(yearTo.value) };
       save("from", range.from);
       save("to", range.to);
+      if (mode !== "duel") start();
     });
   }
   playButton.addEventListener("click", () => playClip(CLIP_SECONDS[stage]));
-  skipButton.addEventListener("click", () => {
-    if (stage >= CLIP_SECONDS.length - 1) return;
-    stage += 1;
-    showStage();
-    playClip(CLIP_SECONDS[stage]);
-  });
+  skipButton.addEventListener("click", longerClip);
+  volume.addEventListener("input", () => setVolume(Number(volume.value) / 100));
   $("createRoom").addEventListener("click", () => Duel.create());
   $("leaveRoom").addEventListener("click", () => Duel.leave());
+
+  async function copy(text, button, restore) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return false; // clipboard blocked
+    }
+    button.textContent = "Copied";
+    setTimeout(() => (button.textContent = restore), 1500);
+    return true;
+  }
+
   $("copyLink").addEventListener("click", async () => {
     const link = $("inviteLink");
-    try {
-      await navigator.clipboard.writeText(link.value);
-    } catch {
-      link.select(); // clipboard blocked: leave the link selected for a manual copy
-      return;
-    }
-    $("copyLink").textContent = "Copied";
-    setTimeout(() => ($("copyLink").textContent = "Copy link"), 1500);
+    if (!(await copy(link.value, $("copyLink"), "Copy link"))) link.select(); // left selected for a manual copy
   });
+  share.addEventListener("click", () => copy(
+    `ScoreGame, ${boardLabel(boardKey())}: a streak of ${streak}. ${location.origin}${location.pathname}`,
+    share, "Copy result"));
   $("ranksRetry").addEventListener("click", () => Ranks.show(Ranks.showing));
 
   who.addEventListener("click", askName);
+  $("help").addEventListener("click", () => $("helpDialog").showModal());
   $("nameCancel").addEventListener("click", () => nameDialog.close());
   $("nameForm").addEventListener("submit", () => {
     playerName = nameInput.value.trim().slice(0, 16);
     save("name", playerName);
     showName();
-    if (playerName && pendingScore) Ranks.submit(pendingScore.key, playerName, pendingScore.score);
-    else Ranks.show(Ranks.showing);
+    Ranks.claimBests(playerName);
+    Ranks.show(Ranks.showing);
   });
-  nameDialog.addEventListener("close", () => (pendingScore = null));
 
-  // 1 to 4 pick a card, left to right.
   document.addEventListener("keydown", (event) => {
-    if (event.ctrlKey || event.metaKey || event.altKey || nameDialog.open) return;
-    if (event.target instanceof HTMLInputElement) return;
-    const n = Number(event.key);
-    if (n >= 1 && n <= 4) pick(n - 1);
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (nameDialog.open || $("helpDialog").open || event.target instanceof HTMLInputElement) return;
+    const key = event.key.toLowerCase();
+    // Cards, left to right: 1 to 9, then 0 for the tenth.
+    if (/^[0-9]$/.test(key)) {
+      const index = key === "0" ? 9 : Number(key) - 1;
+      if (index < tickets.length) pick(index);
+      return;
+    }
+    if (player.hidden) return;
+    if (key === "s") return longerClip();
+    if (key === "m") return setVolume(audio.volume > 0 ? 0 : Number(load("loud")) || 0.8);
+    // Space on a focused button already presses it; only take it over when nothing is focused.
+    if (key === " " && !(event.target instanceof HTMLButtonElement) && !playButton.disabled) {
+      event.preventDefault();
+      playClip(CLIP_SECONDS[stage]);
+    }
+  });
+  volume.addEventListener("change", () => {
+    if (audio.volume > 0) save("loud", audio.volume); // what M un-mutes back to
   });
 
+  themeButtons.forEach((b) => (b.hidden = !themeKinds.includes(b.dataset.theme)));
+  topicButtons.forEach((b) => {
+    if (b.dataset.topic.startsWith("theme:")) b.hidden = !themeKinds.includes(b.dataset.topic.slice(6));
+  });
+  setVolume(load("volume") === null ? 0.8 : Number(load("volume")));
   showName();
+  showStats();
   start();
 })();

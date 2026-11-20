@@ -1,0 +1,538 @@
+/*
+  ScoreGame. DRAFT look, no DESIGN.md yet.
+  DESIGN READ: ScoreGame — ENERGY 2, RHYTHM 2, MOTION 2
+
+  Palette
+    --ink     page background
+    --stub    ticket and panel surface
+    --paper   main text
+    --faded   secondary text
+    --amber   accent: the pick, the main button, the top score
+    --right / --wrong   answer feedback only
+
+  Type scale: 14 caption, 18 body, 28 title, 48 display.
+  Spacing: multiples of 8. Radius: 4 or 8.
+  Motif: every movie is a ticket. Poster on top, a perforated tear line,
+  and the score printed on the stub once the round is over.
+*/
+
+:root {
+  --ink: #14110f;
+  --stub: #241e19;
+  --paper: #f3ead9;
+  --faded: #b8ab95;
+  --amber: #f0b84c;
+  --right: #6fd596;
+  --wrong: #ff7a66;
+  --display: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  --body: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--ink); }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ink);
+  color: var(--paper);
+  font: 18px/1.4 var(--body);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px 24px 8px;
+}
+
+.name {
+  margin: 0;
+  font: 700 28px/1 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+/* Switches: Highest / Lowest at the far left, then what to play. The pressed option is filled amber. */
+.switch {
+  display: flex;
+  gap: 8px;
+}
+
+.switch:last-of-type { margin-right: auto; }
+
+.option {
+  min-height: 48px;
+  padding: 8px 16px;
+  border: 2px solid var(--stub);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faded);
+  font: 700 18px/1 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 180ms ease-out, color 180ms ease-out;
+}
+
+.option:not(:disabled):not([aria-pressed="true"]):hover { border-color: var(--amber); color: var(--paper); }
+
+.option[aria-pressed="true"] {
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--ink);
+}
+
+.option:disabled { opacity: 0.4; cursor: default; }
+.option[hidden] { display: none; }
+
+.tally {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+}
+
+.tally div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tally dt {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faded);
+}
+
+.tally dd {
+  margin: 0;
+  min-width: 2ch;
+  font: 700 28px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* R-19: a short pop when the streak number changes, so the eye catches the gain. */
+.tally dd.bump { animation: bump 320ms ease-out; }
+
+@keyframes bump {
+  40% { transform: scale(1.35); color: var(--amber); }
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 8px 24px 24px;
+}
+
+/* Year range: two handles on one track. */
+.years {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 8px 0 16px;
+  font-size: 14px;
+  color: var(--faded);
+}
+
+.years[hidden], .player[hidden] { display: none; }
+
+.years-label { letter-spacing: 0.08em; text-transform: uppercase; }
+
+.years-label strong {
+  margin-left: 8px;
+  font: 700 28px/1 var(--display);
+  letter-spacing: 0.02em;
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+}
+
+.range {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  height: 48px;
+}
+
+.range::before,
+.range-fill {
+  content: "";
+  position: absolute;
+  top: 22px;
+  height: 4px;
+  border-radius: 4px;
+}
+
+.range::before { left: 0; right: 0; background: var(--stub); }
+.range-fill { background: var(--amber); }
+
+/* The two sliders sit on top of each other. Only their handles take the pointer. */
+.range input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 48px;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.range input::-webkit-slider-runnable-track { background: none; }
+.range input::-moz-range-track { background: none; }
+
+.range input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border: 4px solid var(--ink);
+  border-radius: 4px;
+  background: var(--amber);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.range input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 4px solid var(--ink);
+  border-radius: 4px;
+  background: var(--amber);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+/* Theme rounds: play the clip, or skip to a longer one. */
+.player {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin: 0 0 24px;
+}
+
+.clip {
+  position: relative;
+  overflow: hidden;
+}
+
+/* R-19: the bar empties over the length of the clip, so you can see how long is left. */
+.clip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 8px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.clip.playing::after { animation: clip var(--clip, 1s) linear; }
+
+@keyframes clip {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.action:disabled { opacity: 0.4; cursor: default; }
+
+.stages {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 700 18px/1 var(--display);
+  color: var(--faded);
+}
+
+.stages li {
+  min-width: 48px;
+  padding: 8px;
+  border-bottom: 4px solid var(--stub);
+  text-align: center;
+}
+
+.stages li.used { border-color: var(--faded); }
+.stages li.now { border-color: var(--amber); color: var(--amber); }
+
+.ask {
+  margin: 8px 0 24px;
+  font: 500 28px/1.2 var(--display);
+  letter-spacing: 0.02em;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+/* One ticket */
+.ticket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--stub);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  /* R-19: dealing in, hover lift and answer colours are all state feedback. */
+  transition: transform 180ms ease-out, border-color 180ms ease-out, opacity 320ms ease-out;
+}
+
+.ticket.dealing {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.ticket:nth-child(2) { transition-delay: 60ms; }
+.ticket:nth-child(3) { transition-delay: 120ms; }
+.ticket:nth-child(4) { transition-delay: 180ms; }
+
+.ticket:not(:disabled):hover,
+.ticket:not(:disabled):focus-visible {
+  transform: translateY(-8px);
+  border-color: var(--amber);
+  transition-delay: 0ms;
+}
+
+.ticket:focus-visible,
+.option:focus-visible,
+.store:focus-visible,
+.range input:focus-visible,
+.action:focus-visible {
+  outline: 3px solid var(--paper);
+  outline-offset: 3px;
+}
+
+.ticket:disabled { cursor: default; }
+
+.poster {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  background: var(--ink);
+}
+
+.poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Shown when a poster image fails to load, so the ticket is never blank. */
+.poster .fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  font: 700 28px/1.1 var(--display);
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--faded);
+}
+
+.poster.missing img { display: none; }
+.poster.missing .fallback { display: flex; }
+
+.stub {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 16px;
+}
+
+.title {
+  display: -webkit-box;
+  min-height: 2.2em;
+  margin: 0;
+  overflow: hidden;
+  font: 700 28px/1.1 var(--display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.year {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--faded);
+}
+
+/* The tear line, with a notch punched out at each end. */
+.tear {
+  position: relative;
+  margin: 16px -16px;
+  border-top: 2px dashed var(--ink);
+}
+
+.tear::before,
+.tear::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--ink);
+}
+
+.tear::before { left: -10px; }
+.tear::after { right: -10px; }
+
+.score {
+  margin: 0;
+  font: 700 48px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+  color: var(--faded);
+}
+
+.sources {
+  min-height: 1.4em;
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--faded);
+}
+
+.mark {
+  min-height: 1.4em;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Theme rounds have no score to print, so the stub shows the track name once revealed. */
+.ticket.no-score .score { display: none; }
+
+/* After the pick */
+.ticket.revealed .score { color: var(--paper); }
+.ticket.revealed:not(.top-score):not(.picked) { opacity: 0.7; }
+
+.ticket.top-score { border-color: var(--amber); }
+.ticket.top-score .score,
+.ticket.top-score .mark { color: var(--amber); }
+
+.ticket.picked.top-score { border-color: var(--right); }
+.ticket.picked.top-score .score,
+.ticket.picked.top-score .mark { color: var(--right); }
+
+.ticket.picked:not(.top-score) { border-color: var(--wrong); }
+.ticket.picked:not(.top-score) .mark { color: var(--wrong); }
+
+/* Result bar */
+.result {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 16px 24px;
+  border-top: 2px solid var(--stub);
+  background: var(--ink);
+  animation: rise 240ms ease-out;
+}
+
+.result[hidden] { display: none; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+}
+
+.verdict {
+  margin: 0;
+  font: 500 28px/1.2 var(--display);
+}
+
+.verdict.is-right { color: var(--right); }
+.verdict.is-wrong { color: var(--wrong); }
+
+.store {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--amber);
+  font-size: 18px;
+}
+
+.store[hidden] { display: none; }
+
+.action {
+  min-height: 48px;
+  padding: 8px 32px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--amber);
+  color: var(--ink);
+  font: 700 28px/1 var(--display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 120ms ease-out;
+}
+
+.action:not(:disabled):hover { transform: translateY(-2px); }
+.action:active { transform: translateY(0); }
+.action[hidden] { display: none; }
+
+.notice {
+  margin: 48px 0 16px;
+  color: var(--faded);
+}
+
+.credits {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 16px 24px 24px;
+  font-size: 14px;
+  color: var(--faded);
+}
+
+@media (max-width: 760px) {
+  .top { padding: 16px 16px 8px; flex-wrap: wrap; }
+  .name { width: 100%; }
+  main { padding: 8px 16px 16px; }
+  .tally { gap: 16px; }
+  .ask { margin-bottom: 16px; }
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .stub { padding: 8px; }
+  .title { font-size: 18px; }
+  .score { font-size: 28px; }
+  .tear { margin: 8px -8px; }
+  .credits { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+}

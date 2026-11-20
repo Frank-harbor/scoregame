@@ -17,6 +17,8 @@
   const ROOM_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O or 1/I to misread
   // IMDb votes a title needs at each setting: Hits, Popular, Everything.
   const DEPTHS = { movies: [100000, 25000, 4000], games: [2000, 500, 100] };
+  const BOARD_KEYS = ["movies.highest", "movies.lowest", "games.highest", "games.lowest",
+    "themes.game", "themes.movie", "themes.sound", "duel"];
   const THEME_NAMES = { game: "Game themes", movie: "Movie themes", sound: "Sound effects" };
 
   const $ = (id) => document.getElementById(id);
@@ -130,8 +132,7 @@
   const rated = () => !topic().startsWith("theme:");
   const listKind = () => topic().replace("theme:", "");
   const boardKey = () => (mode === "duel" ? "duel" : rated() ? `${listKind()}.${target}` : `themes.${listKind()}`);
-  // Movie themes are the hard mode: ten to choose from where everything else has four.
-  const choices = () => (topic() === "theme:movie" ? 10 : 4);
+  const choices = () => 4;
   const fmt = (score) => score.toFixed(1);
   const seconds = (n) => (n === 1 ? "1 second" : `${n} seconds`);
   const firstWord = (title) => title.toLowerCase().replace(/^the\s+/, "").split(/[\s:]/)[0];
@@ -545,7 +546,7 @@
   /* ---------- leaderboard ---------- */
 
   const Ranks = {
-    shared: Boolean(CONFIG.supabaseUrl && CONFIG.supabaseKey),
+    shared: Boolean(CONFIG.binUrl || (CONFIG.supabaseUrl && CONFIG.supabaseKey)),
     showing: "",
     request: 0,
 
@@ -574,7 +575,56 @@
       return true;
     },
 
+    // The shared store is one small JSON document: { boards: { key: [{ name, score }] } }.
+    // Anyone can write to it, so everything read back is checked before it is shown or merged.
+    clean(doc) {
+      const boards = {};
+      for (const key of BOARD_KEYS) {
+        const rows = doc && doc.boards && Array.isArray(doc.boards[key]) ? doc.boards[key] : [];
+        boards[key] = rows.filter((r) => r && typeof r.name === "string" && r.name.length >= 1 &&
+          r.name.length <= 16 && Number.isInteger(r.score) && r.score >= 1 && r.score <= 9999)
+          .map((r) => ({ name: r.name, score: r.score }));
+      }
+      return boards;
+    },
+
+    async readStore() {
+      const res = await fetch(CONFIG.binUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`leaderboard ${res.status}`);
+      const text = await res.text();
+      const junk = text.search(/<!doctype/i); // the host tacks a web page onto its replies
+      return this.clean(JSON.parse(junk === -1 ? text : text.slice(0, junk)));
+    },
+
+    // Best per name, highest first.
+    merge(...lists) {
+      const bests = new Map();
+      for (const row of lists.flat()) {
+        if ((bests.get(row.name) || 0) < row.score) bests.set(row.name, row.score);
+      }
+      return [...bests].map(([name, score]) => ({ name, score })).sort((a, b) => b.score - a.score);
+    },
+
+    // Writes go one at a time: read the latest, fold this device's bests in, write it back.
+    // Folding in every board each time also repairs a write another player's write overtook.
+    flush() {
+      this.writing = (this.writing || Promise.resolve()).then(async () => {
+        const boards = await this.readStore();
+        for (const key of BOARD_KEYS) boards[key] = this.merge(boards[key], this.onDevice(key)).slice(0, 100);
+        await fetch(CONFIG.binUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ v: 1, boards }),
+          keepalive: true, // still sent if the tab is closing
+        });
+      }).catch(() => {});
+      return this.writing;
+    },
+
     async top(key) {
+      if (CONFIG.binUrl) {
+        return this.merge((await this.readStore())[key], this.onDevice(key)).slice(0, BOARD_ROWS);
+      }
       if (!this.shared) return this.onDevice(key).slice(0, BOARD_ROWS);
       const url = `${CONFIG.supabaseUrl}/rest/v1/scores?select=name,score` +
         `&board=eq.${encodeURIComponent(key)}&order=score.desc,updated_at.asc&limit=${BOARD_ROWS}`;
@@ -586,7 +636,10 @@
     async submit(key, name, score) {
       if (!name || score < 1) return;
       const improved = this.keepOnDevice(key, name, score);
-      if (improved && this.shared) {
+      if (improved && CONFIG.binUrl) {
+        clearTimeout(this.flushSoon); // several bests at once go up in one write
+        this.flushSoon = setTimeout(() => this.flush().then(() => this.show(this.showing)), 300);
+      } else if (improved && this.shared) {
         // The database keeps whichever is higher, so an off day never lowers a best.
         await fetch(`${CONFIG.supabaseUrl}/rest/v1/rpc/submit_score`, {
           method: "POST",
@@ -600,11 +653,9 @@
 
     // A name set after playing claims every best already earned on this device.
     claimBests(name) {
-      for (const key of ["movies.highest", "movies.lowest", "games.highest", "games.lowest",
-        "themes.game", "themes.movie", "themes.sound"]) {
-        this.submit(key, name, Number(load(`best.${key}`)) || 0);
+      for (const key of BOARD_KEYS) {
+        this.submit(key, name, Number(load(key === "duel" ? "duel.best" : `best.${key}`)) || 0);
       }
-      this.submit("duel", name, Number(load("duel.best")) || 0);
     },
 
     async show(key) {
@@ -1152,7 +1203,7 @@
     ask.hidden = false;
     ask.textContent = rated() ? `Which of these four is rated ${target}?`
       : themeKind === "sound" ? "Which game is this sound from?"
-      : themeKind === "movie" ? "Which of these ten movies is this theme from?"
+      : themeKind === "movie" ? "Which movie is this theme from?"
       : "Which game is this theme from?";
     notice.hidden = false;
     notice.textContent = rated() ? "Dealing the next four." : "Loading the clip.";

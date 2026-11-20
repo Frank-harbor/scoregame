@@ -1,0 +1,1 @@
+window.SG_SOUNDS = [];

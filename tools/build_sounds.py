@@ -80,13 +80,40 @@ def search(term):
     return None
 
 
-def best_track(title, results, kind):
+def plain(track_name):
+    """A track name boiled down for comparing across music services."""
+    return " ".join(words(re.sub(r"[(\[].*?[)\]]", " ", track_name)))
+
+
+def popular_tracks(title, kind, known, offline):
+    """Track names from this title's soundtrack, most played first, according to Deezer."""
+    key = f"{kind}:{title}"
+    if key not in known:
+        if offline:
+            return []
+        url = "https://api.deezer.com/search?" + urllib.parse.urlencode({"q": title + " soundtrack", "limit": 50})
+        try:
+            time.sleep(0.15)  # Deezer allows 50 lookups every 5 seconds
+            with urllib.request.urlopen(url, timeout=30) as res:
+                rows = json.loads(res.read()).get("data") or []
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            return []
+        known[key] = [[r["rank"], r["title"], r["album"]["title"]] for r in rows]
+    rows = [r for r in known[key] if named_for(title, r[2], kind)]
+    return [plain(r[1]) for r in sorted(rows, key=lambda r: -r[0])]
+
+
+def best_track(title, results, kind, popular=()):
+    on_album = [r for r in results if r.get("previewUrl") and r.get("collectionName")
+                and named_for(title, r["collectionName"], kind)]
+    # The most played track is the one people know, so it wins when both services carry it.
+    for name in popular:
+        for r in on_album:
+            if name and plain(r.get("trackName", "")) == name:
+                return {"track": r["trackName"], "album": r["collectionName"], "artist": r["artistName"],
+                        "preview": r["previewUrl"], "link": r["trackViewUrl"]}
     best = None
-    for r in results:
-        if not r.get("previewUrl") or not r.get("collectionName"):
-            continue
-        if not named_for(title, r["collectionName"], kind):
-            continue
+    for r in on_album:
         name = r.get("trackName", "")
         # The main theme is the tune people know. Next best is a track named after the title,
         # then the opening track.
@@ -180,11 +207,16 @@ def main():
         path.write_text(json.dumps(known), encoding="utf-8")
         print(f"  {n}/{len(wanted)} {pools[kind][imdb_id]['title']}", flush=True)
 
+    plays_path = CACHE / "deezer.json"
+    plays = json.loads(plays_path.read_text(encoding="utf-8")) if plays_path.exists() else {}
     chosen = []
     for kind, imdb_id in wanted:
-        track = imdb_id in known and best_track(pools[kind][imdb_id]["title"], known[imdb_id], kind)
-        if track:
-            chosen.append((kind, imdb_id, track))
+        title = pools[kind][imdb_id]["title"]
+        if imdb_id not in known or not best_track(title, known[imdb_id], kind):
+            continue
+        popular = popular_tracks(title, kind, plays, "--no-deezer" in sys.argv)
+        chosen.append((kind, imdb_id, best_track(title, known[imdb_id], kind, popular)))
+    plays_path.write_text(json.dumps(plays), encoding="utf-8")
 
     starts_path = CACHE / "starts.json"
     starts = json.loads(starts_path.read_text(encoding="utf-8")) if starts_path.exists() else {}

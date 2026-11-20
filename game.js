@@ -5,8 +5,9 @@
   const STORE = "scoregame.";
   const COUNT_UP_MS = 700;
   const POSTER_WAIT_MS = 4000;
-  const CLIP_WAIT_MS = 8000;
-  const CLIP_SECONDS = [0.5, 1, 3, 5, 10];
+  const CLIP_WAIT_MS = 12000;
+  const SOUND_SECONDS = [0.5, 1, 3, 5, 10];
+  const VIDEO_SECONDS = [5, 10];
   const SMALLEST_POOL = 8;
   const BOARD_ROWS = 10;
   const LIVES = 5;
@@ -18,7 +19,7 @@
   // IMDb votes a title needs at each setting: Hits, Popular, Everything.
   const DEPTHS = { movies: [100000, 25000, 4000], games: [2000, 500, 100] };
   const BOARD_KEYS = ["movies.highest", "movies.lowest", "games.highest", "games.lowest",
-    "themes.game", "themes.movie", "themes.sound", "duel"];
+    "themes.game", "themes.movie", "themes.sound", "clips.movie", "clips.game", "duel"];
   const THEME_NAMES = { game: "Game themes", movie: "Movie themes", sound: "Sound effects" };
 
   const $ = (id) => document.getElementById(id);
@@ -50,11 +51,12 @@
   const playButton = $("play");
   const skipButton = $("skip");
   const volume = $("volume");
-  const stageDots = [...$("stages").children];
   const tabs = [...document.querySelectorAll("[data-mode]")];
   const targetButtons = [...document.querySelectorAll("[data-target]")];
   const depthButtons = [...document.querySelectorAll("[data-depth]")];
   const themeButtons = [...document.querySelectorAll("[data-theme]")];
+  const clipSeg = $("clipSeg");
+  const clipButtons = [...document.querySelectorAll("[data-clip]")];
   const topicButtons = [...document.querySelectorAll("[data-topic]")];
   const who = $("who");
   const nameDialog = $("nameDialog");
@@ -62,30 +64,41 @@
   const lobby = $("lobby");
 
   const calmMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const audio = new Audio();
+  // One video element plays everything. For sound-only rounds it stays hidden.
+  const audio = $("screen");
   audio.preload = "auto";
 
   // Sound effects join the theme clips once a data/sounds.js exists. Until then that option stays hidden.
-  const clips = [
+  const sounds = [
     ...(Array.isArray(window.SG_THEMES) ? window.SG_THEMES : []),
     ...(Array.isArray(window.SG_SOUNDS) ? window.SG_SOUNDS.map((s) => ({ ...s, kind: "sound" })) : []),
   ];
+  const trailers = Array.isArray(window.SG_CLIPS) ? window.SG_CLIPS : [];
   const lists = {
     movies: window.SG_MOVIES,
     games: window.SG_GAMES,
-    game: clips.filter((c) => c.kind === "game"),
-    movie: clips.filter((c) => c.kind === "movie"),
-    sound: clips.filter((c) => c.kind === "sound"),
+    "theme:game": sounds.filter((c) => c.kind === "game"),
+    "theme:movie": sounds.filter((c) => c.kind === "movie"),
+    "theme:sound": sounds.filter((c) => c.kind === "sound"),
+    "clip:movie": trailers.filter((c) => c.kind === "movie"),
+    "clip:game": trailers.filter((c) => c.kind === "game"),
   };
-  const themeKinds = ["game", "movie", "sound"].filter((k) => lists[k].length >= SMALLEST_POOL);
+  const playable = (name) => Array.isArray(lists[name]) && lists[name].length >= SMALLEST_POOL;
+  const themeKinds = ["game", "movie", "sound"].filter((k) => playable(`theme:${k}`));
+  const clipKinds = ["movie", "game"].filter((k) => playable(`clip:${k}`));
   const roomInLink = new URLSearchParams(location.search).get("room");
 
-  let mode = ["themes", "movies", "games", "duel"].includes(load("mode")) ? load("mode") : "themes";
+  let mode = ["themes", "clips", "movies", "games", "duel"].includes(load("mode")) ? load("mode") : "themes";
+  if (mode === "clips" && clipKinds.length === 0) mode = "themes";
   if (roomInLink) mode = "duel";
   let target = load("target") === "lowest" ? "lowest" : "highest";
   let depth = [0, 1, 2].includes(Number(load("depth") ?? 1)) ? Number(load("depth") ?? 1) : 1;
   let themeKind = themeKinds.includes(load("theme")) ? load("theme") : themeKinds[0] || "game";
+  let clipKind = clipKinds.includes(load("clip")) ? load("clip") : clipKinds[0] || "movie";
   let range = { from: Number(load("from")) || 0, to: Number(load("to")) || 9999 };
+  let stream = null; // the hls.js player behind a Steam trailer
+  let clipFrom = 0; // seconds into the clip where play starts
+  let clipAt = 0.3; // how far through a trailer the clip is cut, as a fraction
   let playerName = (load("name") || "").slice(0, 16);
   let stats = readJson("stats", { rounds: 0, right: 0 });
   let askedForName = false;
@@ -127,12 +140,29 @@
     }
   }
 
-  // What is on the table right now: a rated list ("movies", "games") or a clip list ("game", "movie", "sound").
-  const topic = () => (mode === "duel" ? Duel.topic : mode === "themes" ? `theme:${themeKind}` : mode);
-  const rated = () => !topic().startsWith("theme:");
-  const listKind = () => topic().replace("theme:", "");
-  const boardKey = () => (mode === "duel" ? "duel" : rated() ? `${listKind()}.${target}` : `themes.${listKind()}`);
-  const choices = () => 4;
+  // What is on the table right now: a rated list ("movies", "games"), a sound list
+  // ("theme:game", "theme:movie", "theme:sound") or a trailer list ("clip:movie", "clip:game").
+  const topic = () => (mode === "duel" ? Duel.topic
+    : mode === "themes" ? `theme:${themeKind}`
+    : mode === "clips" ? `clip:${clipKind}`
+    : mode);
+  const rated = () => topic() === "movies" || topic() === "games";
+  const isVideo = () => topic().startsWith("clip:");
+  const listKind = () => topic();
+  const boardKey = () => (mode === "duel" ? "duel" : rated() ? `${topic()}.${target}` : topic().replace(":", "s."));
+  // A clip shows far more than a sound gives away, so it comes with six to choose from.
+  const choices = () => (isVideo() ? 6 : 4);
+  const clipSeconds = () => (isVideo() ? VIDEO_SECONDS : SOUND_SECONDS);
+
+  function askText() {
+    return {
+      "theme:game": "Which game is this theme from?",
+      "theme:movie": "Which movie is this theme from?",
+      "theme:sound": "Which game is this sound from?",
+      "clip:movie": "Which movie is this clip from?",
+      "clip:game": "Which game is this clip from?",
+    }[topic()] || `Which of these four is rated ${target}?`;
+  }
   const fmt = (score) => score.toFixed(1);
   const seconds = (n) => (n === 1 ? "1 second" : `${n} seconds`);
   const firstWord = (title) => title.toLowerCase().replace(/^the\s+/, "").split(/[\s:]/)[0];
@@ -144,6 +174,7 @@
     if (key === "duel") return "1v1 · Win streak";
     const [what, which] = key.split(".");
     if (what === "themes") return THEME_NAMES[which];
+    if (what === "clips") return which === "movie" ? "Movie clips" : "Game clips";
     return `${what[0].toUpperCase()}${what.slice(1)} · ${which[0].toUpperCase()}${which.slice(1)}`;
   }
 
@@ -220,6 +251,7 @@
     refillUnseen();
     const at = Math.floor(Math.random() * unseen.length);
     answer = pool[unseen.splice(at, 1)[0]];
+    clipAt = 0.2 + Math.random() * 0.4; // the middle of a trailer, clear of the title cards
     // Wrong answers come from other series, so "Halo" never sits next to "Halo 2".
     const others = pool.filter((g) => firstWord(g.title) !== firstWord(answer.title));
     const four = [answer];
@@ -249,21 +281,43 @@
     });
   }
 
-  function loadClip(src) {
+  // Loads the clip and parks it at the point play will start from.
+  function loadClip(item) {
     return new Promise((resolve) => {
       const finish = (ok) => {
-        audio.removeEventListener("canplaythrough", yes);
-        audio.removeEventListener("error", no);
+        audio.removeEventListener("loadedmetadata", place);
+        audio.removeEventListener("seeked", ready);
+        audio.removeEventListener("error", broken);
         clearTimeout(wait);
         resolve(ok);
       };
-      const yes = () => finish(true);
-      const no = () => finish(false);
-      const wait = setTimeout(no, CLIP_WAIT_MS);
-      audio.addEventListener("canplaythrough", yes);
-      audio.addEventListener("error", no);
-      audio.src = src;
-      audio.load();
+      const ready = () => finish(true);
+      const broken = () => finish(false);
+      const place = () => {
+        const video = Boolean(item.hls) || isVideo();
+        clipFrom = video
+          ? Math.max(0, Math.min(audio.duration * clipAt, audio.duration - 15))
+          : item.start || 0;
+        audio.addEventListener("seeked", ready);
+        audio.currentTime = clipFrom;
+      };
+      const wait = setTimeout(broken, CLIP_WAIT_MS);
+      audio.addEventListener("loadedmetadata", place);
+      audio.addEventListener("error", broken);
+      if (stream) {
+        stream.destroy();
+        stream = null;
+      }
+      // Steam serves its trailers as HLS streams, which most browsers need hls.js to play.
+      if (item.hls && window.Hls && window.Hls.isSupported()) {
+        stream = new window.Hls({ maxBufferLength: 20 });
+        stream.on(window.Hls.Events.ERROR, (_, data) => data.fatal && broken());
+        stream.loadSource(item.hls);
+        stream.attachMedia(audio);
+      } else {
+        audio.src = item.hls || item.preview;
+        audio.load();
+      }
     });
   }
 
@@ -273,11 +327,11 @@
     playButton.classList.remove("playing");
   }
 
-  // Plays from the clip's marked start, its loudest stretch. A length of 0 runs to the end.
+  // Plays from where the clip was parked. A length of 0 runs to the end.
   function playClip(length) {
     if (!answer) return;
     stopClip();
-    audio.currentTime = answer.start || 0;
+    audio.currentTime = clipFrom;
     audio.play().then(() => {
       if (!length) return;
       playButton.style.setProperty("--clip", `${length}s`);
@@ -290,22 +344,24 @@
   }
 
   function showStage() {
-    const length = CLIP_SECONDS[stage];
-    playButton.textContent = `Play ${seconds(length)}`;
-    stageDots.forEach((dot, i) => {
-      dot.classList.toggle("used", i < stage);
-      dot.classList.toggle("now", i === stage);
-    });
-    const last = stage === CLIP_SECONDS.length - 1;
+    const lengths = clipSeconds();
+    playButton.textContent = `Play ${seconds(lengths[stage])}`;
+    $("stages").replaceChildren(...lengths.map((length, i) => {
+      const dot = document.createElement("li");
+      dot.textContent = `${length}s`;
+      dot.className = i < stage ? "used" : i === stage ? "now" : "";
+      return dot;
+    }));
+    const last = stage === lengths.length - 1;
     skipButton.hidden = last;
-    if (!last) skipButton.textContent = `Skip to ${seconds(CLIP_SECONDS[stage + 1])}`;
+    if (!last) skipButton.textContent = `Skip to ${seconds(lengths[stage + 1])}`;
   }
 
   function longerClip() {
-    if (player.hidden || skipButton.disabled || stage >= CLIP_SECONDS.length - 1) return;
+    if (player.hidden || skipButton.disabled || stage >= clipSeconds().length - 1) return;
     stage += 1;
     showStage();
-    playClip(CLIP_SECONDS[stage]);
+    playClip(clipSeconds()[stage]);
   }
 
   function setVolume(level) {
@@ -368,7 +424,7 @@
     if (tickets.length !== items.length) {
       tickets = items.map((_, i) => buildTicket(i));
       board.replaceChildren(...tickets);
-      board.classList.toggle("ten", items.length > 4);
+      board.classList.toggle("six", items.length > 4);
     }
     notice.hidden = true;
     tickets.forEach((t, i) => fillTicket(t, round[i], scored));
@@ -412,7 +468,7 @@
     let four;
     for (let attempt = 0; ; attempt++) {
       four = drawClipRound();
-      const ready = await loadClip(answer.preview);
+      const ready = await loadClip(answer);
       if (thisDeal !== dealNumber) return;
       if (ready) break;
       if (attempt === 3) return fail("The clips are not loading. Check your connection and try again.");
@@ -471,6 +527,7 @@
     if (!scored) {
       store.hidden = !winner.link;
       if (winner.link) store.href = winner.link;
+      store.textContent = winner.hls ? "The game on Steam" : isVideo() ? "The movie on Apple TV" : "Full track on Apple Music";
       playButton.disabled = true;
       skipButton.disabled = true;
       playClip(0); // the rest of the clip, as the payoff
@@ -513,7 +570,7 @@
           `${chosen.title} had ${fmt(chosen.score)}.`;
     } else {
       verdict.textContent = right
-        ? `Right. ${winner.title}, from ${seconds(CLIP_SECONDS[stage])}.`
+        ? `Right. ${winner.title}, from ${seconds(clipSeconds()[stage])}.`
         : `Streak over at ${streak}. That was ${winner.title}.`;
     }
     next.textContent = right ? "Next round" : "Play again";
@@ -754,13 +811,18 @@
   }
 
   function lockControls(locked) {
-    for (const el of [...targetButtons, ...depthButtons, ...themeButtons, yearFrom, yearTo]) el.disabled = locked;
+    for (const el of [...targetButtons, ...depthButtons, ...themeButtons, ...clipButtons, yearFrom, yearTo]) {
+      el.disabled = locked;
+    }
   }
 
   // Shows the controls that mean something for what is being played.
   function showControls() {
     const clip = !rated();
     themeSeg.hidden = mode !== "themes" || themeKinds.length < 2;
+    clipSeg.hidden = mode !== "clips" || clipKinds.length < 2;
+    audio.hidden = !isVideo();
+    press(clipButtons, "clip", clipKind);
     targetSeg.hidden = clip;
     depthSeg.hidden = clip;
     years.hidden = clip;
@@ -817,6 +879,8 @@
         years.hidden = true;
       }
       themeSeg.hidden = true;
+      clipSeg.hidden = true;
+      audio.hidden = true;
     },
 
     setup(problem) {
@@ -836,7 +900,7 @@
       if (!Array.isArray(lists.movies) || !Array.isArray(lists.games)) {
         return fail("The movie and game lists did not load. Check your connection and try again.");
       }
-      if (!rated() && !themeKinds.includes(listKind())) this.topic = themeKinds[0] ? `theme:${themeKinds[0]}` : "movies";
+      if (!playable(this.topic)) this.topic = "movies";
       if (this.state !== "idle") return;
       if (roomInLink && !this.usedLink) {
         this.usedLink = true;
@@ -916,7 +980,7 @@
       } else if (m.t === "hello") {
         // The host's choices apply for this match only; nothing here is saved.
         this.theirName = String(m.name || "Your friend").slice(0, 16);
-        this.topic = ["movies", "games", "theme:game", "theme:movie", "theme:sound"].includes(m.topic) ? m.topic : "movies";
+        this.topic = Object.keys(lists).includes(m.topic) ? m.topic : "movies";
         target = m.target === "lowest" ? "lowest" : "highest";
         depth = [0, 1, 2].includes(m.depth) ? m.depth : 1;
         range = { from: Number(m.from) || 0, to: Number(m.to) || 9999 };
@@ -927,6 +991,7 @@
         if (items.length !== choices() || items.some((item) => !item)) {
           return this.fall("Your two copies of the game are out of step. Both refresh the page and try again.");
         }
+        clipAt = Number(m.at) || 0.3;
         this.showRound(m.n, items, byId.get(m.answer));
       } else if (m.t === "pick" && this.host) {
         if (m.n !== this.n || !this.open || this.theirPick !== null) return;
@@ -953,6 +1018,7 @@
       lobby.hidden = true;
       showControls();
       themeSeg.hidden = true;
+      clipSeg.hidden = true;
       tally.hidden = false;
       pool = buildPool();
       unseen = [];
@@ -972,7 +1038,7 @@
 
     nextRound() {
       const items = rated() ? drawRatedRound(DUEL_GAP) : drawClipRound();
-      this.send({ t: "round", n: this.n + 1, ids: items.map((item) => item.id), answer: rated() ? null : answer.id });
+      this.send({ t: "round", n: this.n + 1, ids: items.map((item) => item.id), answer: rated() ? null : answer.id, at: clipAt });
       this.showRound(this.n + 1, items, answer);
     },
 
@@ -985,14 +1051,12 @@
       stopClip();
       result.hidden = true;
       ask.hidden = false;
-      ask.textContent = rated()
-        ? `Round ${n}. Which of these four is rated ${target}?`
-        : `Round ${n}. Which one is this from?`;
+      ask.textContent = `Round ${n}. ${askText()}`;
       const thisDeal = hideTable();
       if (!rated()) {
         answer = clipAnswer;
         readyClipControls(false);
-        await loadClip(answer.preview);
+        await loadClip(answer);
         if (thisDeal !== dealNumber) return;
         readyClipControls(true);
       }
@@ -1201,10 +1265,7 @@
     }
     player.hidden = rated();
     ask.hidden = false;
-    ask.textContent = rated() ? `Which of these four is rated ${target}?`
-      : themeKind === "sound" ? "Which game is this sound from?"
-      : themeKind === "movie" ? "Which movie is this theme from?"
-      : "Which game is this theme from?";
+    ask.textContent = askText();
     notice.hidden = false;
     notice.textContent = rated() ? "Dealing the next four." : "Loading the clip.";
     deal();
@@ -1243,6 +1304,12 @@
     save("theme", themeKind);
     start();
   }));
+  clipButtons.forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.clip === clipKind) return;
+    clipKind = b.dataset.clip;
+    save("clip", clipKind);
+    start();
+  }));
   topicButtons.forEach((b) => b.addEventListener("click", () => {
     Duel.topic = b.dataset.topic;
     save("duelTopic", Duel.topic);
@@ -1257,7 +1324,7 @@
       if (mode !== "duel") start();
     });
   }
-  playButton.addEventListener("click", () => playClip(CLIP_SECONDS[stage]));
+  playButton.addEventListener("click", () => playClip(clipSeconds()[stage]));
   skipButton.addEventListener("click", longerClip);
   volume.addEventListener("input", () => setVolume(Number(volume.value) / 100));
   $("createRoom").addEventListener("click", () => Duel.create());
@@ -1310,7 +1377,7 @@
     // Space on a focused button already presses it; only take it over when nothing is focused.
     if (key === " " && !(event.target instanceof HTMLButtonElement) && !playButton.disabled) {
       event.preventDefault();
-      playClip(CLIP_SECONDS[stage]);
+      playClip(clipSeconds()[stage]);
     }
   });
   volume.addEventListener("change", () => {
@@ -1318,9 +1385,9 @@
   });
 
   themeButtons.forEach((b) => (b.hidden = !themeKinds.includes(b.dataset.theme)));
-  topicButtons.forEach((b) => {
-    if (b.dataset.topic.startsWith("theme:")) b.hidden = !themeKinds.includes(b.dataset.topic.slice(6));
-  });
+  clipButtons.forEach((b) => (b.hidden = !clipKinds.includes(b.dataset.clip)));
+  topicButtons.forEach((b) => (b.hidden = !playable(b.dataset.topic)));
+  tabs.find((b) => b.dataset.mode === "clips").hidden = clipKinds.length === 0;
   setVolume(load("volume") === null ? 0.8 : Number(load("volume")));
   showName();
   showStats();

@@ -16,6 +16,7 @@
       <span class="brand">Score<b>Game</b></span>
       <nav class="tabs" aria-label="What to play">
         <button class="tab" type="button" data-mode="themes" aria-pressed="true">Themes</button>
+        <button class="tab" type="button" data-mode="clips" aria-pressed="false">Clips</button>
         <button class="tab" type="button" data-mode="movies" aria-pressed="false">Movies</button>
         <button class="tab" type="button" data-mode="games" aria-pressed="false">Games</button>
         <button class="tab" type="button" data-mode="duel" aria-pressed="false">1v1</button>
@@ -32,6 +33,11 @@
           <button type="button" data-theme="game" aria-pressed="true">Game themes</button>
           <button type="button" data-theme="movie" aria-pressed="false">Movie themes</button>
           <button type="button" data-theme="sound" aria-pressed="false" hidden>Sound effects</button>
+        </div>
+
+        <div class="seg" id="clipSeg" role="group" aria-label="Which clips">
+          <button type="button" data-clip="movie" aria-pressed="true">Movie clips</button>
+          <button type="button" data-clip="game" aria-pressed="false">Game clips</button>
         </div>
 
         <div class="seg" id="targetSeg" role="group" aria-label="Which rating to pick">
@@ -68,6 +74,8 @@
           <button type="button" data-topic="theme:game" aria-pressed="true">Game themes</button>
           <button type="button" data-topic="theme:movie" aria-pressed="false">Movie themes</button>
           <button type="button" data-topic="theme:sound" aria-pressed="false" hidden>Sound effects</button>
+          <button type="button" data-topic="clip:movie" aria-pressed="false">Movie clips</button>
+          <button type="button" data-topic="clip:game" aria-pressed="false">Game clips</button>
           <button type="button" data-topic="movies" aria-pressed="false">Movies</button>
           <button type="button" data-topic="games" aria-pressed="false">Games</button>
         </div>
@@ -84,11 +92,11 @@
       <h2 class="ask" id="ask"></h2>
       <div class="timer" id="timer" hidden><span></span></div>
 
+      <video class="screen" id="screen" playsinline hidden></video>
+
       <div class="player" id="player" hidden>
         <button class="btn clip" id="play" type="button">Play 0.5 seconds</button>
-        <ol class="stages" id="stages" aria-label="Clip lengths">
-          <li>0.5s</li><li>1s</li><li>3s</li><li>5s</li><li>10s</li>
-        </ol>
+        <ol class="stages" id="stages" aria-label="Clip lengths"></ol>
         <button class="btn ghost" id="skip" type="button">Skip to 1 second</button>
         <label class="volume">Volume <input type="range" id="volume" min="0" max="100" step="5"></label>
       </div>
@@ -131,7 +139,7 @@
   </div>
 
   <footer class="credits">
-    Each score is the average of the IMDb rating (out of 10, counted as out of 100) and the Metacritic score. IMDb ratings come from IMDb's public ratings file, Metacritic scores from Wikidata and Wikipedia. Posters and box art from Wikipedia. Theme clips are Apple Music previews.
+    Each score is the average of the IMDb rating (out of 10, counted as out of 100) and the Metacritic score. IMDb ratings come from IMDb's public ratings file, Metacritic scores from Wikidata and Wikipedia. Posters and box art from Wikipedia. Theme clips are Apple Music previews. Movie trailers stream from Apple, game trailers from Steam.
   </footer>
 
   <dialog class="sheet" id="nameDialog" aria-labelledby="nameTitle">
@@ -152,6 +160,8 @@
       <dl class="rules">
         <dt>Themes</dt>
         <dd>Hear half a second of a soundtrack and pick which of the four it comes from. Stuck? Skip to a longer clip: 1, 3, 5, then 10 seconds.</dd>
+        <dt>Clips</dt>
+        <dd>Watch five seconds from the middle of a trailer and pick which of six it is. You can skip to ten seconds.</dd>
         <dt>Movies and Games</dt>
         <dd>Four titles, each with a hidden score. Pick the highest, or switch to Lowest. Hits, Popular and Everything set how well known the titles are.</dd>
         <dt>1v1</dt>
@@ -170,6 +180,8 @@
   <script src="data/games.js"></script>
   <script src="data/themes.js"></script>
   <script src="data/sounds.js"></script>
+  <script src="data/clips.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="game.js"></script>
 </body>

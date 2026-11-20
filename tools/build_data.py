@@ -1,4 +1,4 @@
-"""Builds data/movies.js and data/games.js for Top Billing.
+"""Builds data/movies.js and data/games.js for ScoreGame.
 
 Score sources, and nothing else:
   IMDb        official ratings file, datasets.imdbws.com (personal, non-commercial use)
@@ -22,8 +22,8 @@ from pathlib import Path
 
 CACHE = Path("data/cache")
 UA = {"User-Agent": "movie-game-prototype/0.1"}
-MOVIE_MIN_VOTES = 5_000
-GAME_MIN_VOTES = 50
+MOVIE_MIN_VOTES = 100_000
+GAME_MIN_VOTES = 2_000
 FILM_TYPES = "wd:Q11424 wd:Q202866 wd:Q20650540 wd:Q93204 wd:Q29168811"
 
 FILMS_QUERY = """SELECT ?f ?imdb ?title ?score (MIN(YEAR(?date)) AS ?year) WHERE {
@@ -200,8 +200,8 @@ def main():
     print(len(films), "films and", len(games), "games have both scores", flush=True)
 
     images = lead_images([x["title"] for x in list(films.values()) + list(games.values())])
-    for name, variable, group in (("movies.js", "TOP_BILLING_MOVIES", films),
-                                  ("games.js", "TOP_BILLING_GAMES", games)):
+    for name, variable, group in (("movies.js", "SG_MOVIES", films),
+                                  ("games.js", "SG_GAMES", games)):
         # Several Metacritic entries (platforms, re-releases) for one title: take the middle one.
         write(name, variable, [
             entry(x["imdb"], x["title"], x["year"], x["rating"],

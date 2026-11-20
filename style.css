@@ -3,186 +3,211 @@
   DESIGN READ: ScoreGame — ENERGY 2, RHYTHM 2, MOTION 2
 
   Palette
-    --ink     page background
-    --stub    ticket and panel surface
-    --paper   main text
-    --faded   secondary text
-    --amber   accent: the pick, the main button, the top score
-    --right / --wrong   answer feedback only
+    --bg      page
+    --panel   raised surfaces: leaderboard, lobby, result bar, dialog
+    --raised  the pressed option inside a control
+    --line    hairlines and control borders
+    --text    main text
+    --dim     secondary text
+    --accent  the one loud colour: main button, active tab, the winning card
+    --good / --bad   answer feedback only
 
-  Type scale: 14 caption, 18 body, 28 title, 48 display.
-  Spacing: multiples of 8. Radius: 4 or 8.
-  Motif: every movie is a ticket. Poster on top, a perforated tear line,
-  and the score printed on the stub once the round is over.
+  Type: Inter. Sizes 14 caption, 16 body, 22 heading, 44 score.
+  Spacing: multiples of 4. Radius: 8 controls, 12 cards and panels, 999 pills.
+  Motif: the score meter. Every card carries a thin bar that fills to its score on
+  the reveal, so four numbers can be compared at a glance.
 */
 
 :root {
-  --ink: #14110f;
-  --stub: #241e19;
-  --paper: #f3ead9;
-  --faded: #b8ab95;
-  --amber: #f0b84c;
-  --right: #6fd596;
-  --wrong: #ff7a66;
-  --display: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
-  --body: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --bg: #0c0e12;
+  --panel: #151920;
+  --raised: #262c37;
+  --line: #2a303b;
+  --text: #eef1f5;
+  --dim: #9aa3b2;
+  --accent: #ffd21f;
+  --ink: #14161a;
+  --good: #3ddc84;
+  --bad: #ff6b6b;
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
-html { background: var(--ink); }
+html { background: var(--bg); }
 
 body {
   margin: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--ink);
-  color: var(--paper);
-  font: 18px/1.4 var(--body);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
 }
 
-.top {
+button, input { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ---------- top bar ---------- */
+
+.bar { border-bottom: 1px solid var(--line); }
+
+.bar-in {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  max-width: 1120px;
+  align-items: stretch;
+  gap: 32px;
+  max-width: 1240px;
+  min-height: 64px;
   margin: 0 auto;
-  padding: 24px 24px 8px;
+  padding: 0 24px;
 }
 
-.name {
-  margin: 0;
-  font: 700 28px/1 var(--display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--amber);
+.brand {
+  align-self: center;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
-/* Switches: Highest / Lowest at the far left, then what to play. The pressed option is filled amber. */
-.switch {
-  display: flex;
-  gap: 8px;
-}
+.brand b { color: var(--accent); font-weight: 800; }
 
-.switch:last-of-type { margin-right: auto; }
+.tabs { display: flex; gap: 4px; margin-right: auto; }
 
-.option {
-  min-height: 48px;
-  padding: 8px 16px;
-  border: 2px solid var(--stub);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--faded);
-  font: 700 18px/1 var(--display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.tab {
+  position: relative;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 180ms ease-out, color 180ms ease-out;
+  transition: color 160ms ease-out;
 }
 
-.option:not(:disabled):not([aria-pressed="true"]):hover { border-color: var(--amber); color: var(--paper); }
+.tab:hover { color: var(--text); }
+.tab[aria-pressed="true"] { color: var(--text); }
 
-.option[aria-pressed="true"] {
-  border-color: var(--amber);
-  background: var(--amber);
-  color: var(--ink);
+/* The active tab sits on the bar's bottom edge. */
+.tab[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
 }
 
-.option:disabled { opacity: 0.4; cursor: default; }
-.option[hidden] { display: none; }
-
-.tally {
-  display: flex;
-  gap: 24px;
-  margin: 0;
-}
-
-.tally div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.tally dt {
+.who {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--dim);
   font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faded);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms ease-out, border-color 160ms ease-out;
 }
 
-.tally dd {
-  margin: 0;
-  min-width: 2ch;
-  font: 700 28px/1 var(--display);
-  font-variant-numeric: tabular-nums;
-}
+.who:hover { color: var(--text); border-color: var(--dim); }
 
-/* R-19: a short pop when the streak number changes, so the eye catches the gain. */
-.tally dd.bump { animation: bump 320ms ease-out; }
+/* ---------- page layout ---------- */
 
-@keyframes bump {
-  40% { transform: scale(1.35); color: var(--amber); }
-}
-
-main {
+.layout {
   flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: 32px;
   width: 100%;
-  max-width: 1120px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 8px 24px 24px;
+  padding: 24px;
 }
 
-/* Year range: two handles on one track. */
-.years {
+/* ---------- controls row ---------- */
+
+.controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 24px;
-  margin: 8px 0 16px;
+  gap: 16px 24px;
+  min-height: 48px;
+  margin-bottom: 24px;
+}
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.seg button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--dim);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 160ms ease-out, background-color 160ms ease-out;
+}
+
+.seg button:not(:disabled):hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.seg button:disabled { cursor: default; }
+
+.years {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
   font-size: 14px;
-  color: var(--faded);
+  color: var(--dim);
 }
 
-.years[hidden], .player[hidden] { display: none; }
-
-.years-label { letter-spacing: 0.08em; text-transform: uppercase; }
-
-.years-label strong {
-  margin-left: 8px;
-  font: 700 28px/1 var(--display);
-  letter-spacing: 0.02em;
-  color: var(--paper);
-  font-variant-numeric: tabular-nums;
-}
+.years-text { min-width: 176px; font-variant-numeric: tabular-nums; }
 
 .range {
   position: relative;
   flex: 1;
-  min-width: 240px;
-  height: 48px;
+  min-width: 120px;
+  height: 44px;
 }
 
 .range::before,
 .range-fill {
   content: "";
   position: absolute;
-  top: 22px;
+  top: 20px;
   height: 4px;
-  border-radius: 4px;
+  border-radius: 999px;
 }
 
-.range::before { left: 0; right: 0; background: var(--stub); }
-.range-fill { background: var(--amber); }
+.range::before { left: 0; right: 0; background: var(--line); }
+.range-fill { background: var(--accent); }
 
-/* The two sliders sit on top of each other. Only their handles take the pointer. */
+/* Two sliders share one track. Only their handles take the pointer. */
 .range input {
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 48px;
+  height: 44px;
   margin: 0;
   background: none;
   pointer-events: none;
@@ -195,142 +220,201 @@ main {
 
 .range input::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 24px;
-  height: 24px;
-  border: 4px solid var(--ink);
-  border-radius: 4px;
-  background: var(--amber);
+  width: 20px;
+  height: 20px;
+  border: 4px solid var(--bg);
+  border-radius: 999px;
+  background: var(--text);
   cursor: grab;
   pointer-events: auto;
 }
 
 .range input::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border: 4px solid var(--ink);
-  border-radius: 4px;
-  background: var(--amber);
+  width: 12px;
+  height: 12px;
+  border: 4px solid var(--bg);
+  border-radius: 999px;
+  background: var(--text);
   cursor: grab;
   pointer-events: auto;
 }
 
-/* Theme rounds: play the clip, or skip to a longer one. */
+.range input:disabled::-webkit-slider-thumb { background: var(--dim); cursor: default; }
+.range input:disabled::-moz-range-thumb { background: var(--dim); cursor: default; }
+
+.tally {
+  display: flex;
+  gap: 24px;
+  margin: 0 0 0 auto;
+}
+
+.tally div { display: flex; align-items: baseline; gap: 8px; }
+.tally dt { font-size: 14px; color: var(--dim); }
+
+.tally dd {
+  margin: 0;
+  min-width: 2ch;
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* R-19: a short pop when a number changes, so the eye catches the gain. */
+.tally dd.bump { animation: bump 320ms ease-out; }
+
+@keyframes bump {
+  40% { transform: scale(1.3); color: var(--accent); }
+}
+
+/* ---------- prompt, timer, theme player ---------- */
+
+.ask {
+  margin: 0 0 16px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* R-19: the bar drains over the round, showing the time left to pick. */
+.timer {
+  height: 4px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.timer span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+}
+
+.timer.running span { animation: drain var(--time, 20s) linear forwards; }
+
+@keyframes drain {
+  to { transform: scaleX(0); }
+}
+
 .player {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px 24px;
-  margin: 0 0 24px;
+  gap: 12px 16px;
+  margin-bottom: 24px;
 }
 
-.clip {
+.stages {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.stages li {
+  min-width: 44px;
+  padding: 8px 4px;
+  border-bottom: 2px solid var(--line);
+  text-align: center;
+}
+
+.stages li.used { border-color: var(--dim); }
+.stages li.now { border-color: var(--accent); color: var(--text); }
+
+/* ---------- buttons ---------- */
+
+.btn {
   position: relative;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
   overflow: hidden;
+  transition: filter 160ms ease-out, border-color 160ms ease-out;
 }
 
-/* R-19: the bar empties over the length of the clip, so you can see how long is left. */
+.btn:not(:disabled):hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+.btn.ghost {
+  border-color: var(--line);
+  background: none;
+  color: var(--text);
+}
+
+.btn.ghost:not(:disabled):hover { border-color: var(--dim); filter: none; }
+
+/* R-19: the strip fills over the length of the clip, so you can see how long is left. */
 .clip::after {
   content: "";
   position: absolute;
   left: 0;
   bottom: 0;
   width: 100%;
-  height: 8px;
+  height: 4px;
   background: var(--ink);
   transform: scaleX(0);
   transform-origin: left;
 }
 
-.clip.playing::after { animation: clip var(--clip, 1s) linear; }
+.clip.playing::after { animation: fill var(--clip, 1s) linear; }
 
-@keyframes clip {
-  from { transform: scaleX(0); }
+@keyframes fill {
   to { transform: scaleX(1); }
 }
 
-.action:disabled { opacity: 0.4; cursor: default; }
-
-.stages {
-  display: flex;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font: 700 18px/1 var(--display);
-  color: var(--faded);
-}
-
-.stages li {
-  min-width: 48px;
-  padding: 8px;
-  border-bottom: 4px solid var(--stub);
-  text-align: center;
-}
-
-.stages li.used { border-color: var(--faded); }
-.stages li.now { border-color: var(--amber); color: var(--amber); }
-
-.ask {
-  margin: 8px 0 24px;
-  font: 500 28px/1.2 var(--display);
-  letter-spacing: 0.02em;
-}
+/* ---------- the four cards ---------- */
 
 .board {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
-/* One ticket */
 .ticket {
-  position: relative;
   display: flex;
   flex-direction: column;
   padding: 0;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background: var(--stub);
-  color: inherit;
-  font: inherit;
+  border: 0;
+  background: none;
   text-align: left;
   cursor: pointer;
-  overflow: hidden;
-  /* R-19: dealing in, hover lift and answer colours are all state feedback. */
-  transition: transform 180ms ease-out, border-color 180ms ease-out, opacity 320ms ease-out;
+  /* R-19: cards slide in on a new round. */
+  transition: transform 240ms ease-out, opacity 240ms ease-out;
 }
 
-.ticket.dealing {
-  opacity: 0;
-  transform: translateY(16px);
-}
-
-.ticket:nth-child(2) { transition-delay: 60ms; }
-.ticket:nth-child(3) { transition-delay: 120ms; }
-.ticket:nth-child(4) { transition-delay: 180ms; }
-
-.ticket:not(:disabled):hover,
-.ticket:not(:disabled):focus-visible {
-  transform: translateY(-8px);
-  border-color: var(--amber);
-  transition-delay: 0ms;
-}
-
-.ticket:focus-visible,
-.option:focus-visible,
-.store:focus-visible,
-.range input:focus-visible,
-.action:focus-visible {
-  outline: 3px solid var(--paper);
-  outline-offset: 3px;
-}
-
+.ticket.dealing { opacity: 0; transform: translateY(12px); }
+.ticket:nth-child(2) { transition-delay: 50ms; }
+.ticket:nth-child(3) { transition-delay: 100ms; }
+.ticket:nth-child(4) { transition-delay: 150ms; }
 .ticket:disabled { cursor: default; }
+.ticket:focus-visible { outline: none; }
 
 .poster {
   position: relative;
+  display: block;
   aspect-ratio: 2 / 3;
-  background: var(--ink);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+  transition: transform 160ms ease-out, border-color 160ms ease-out;
+}
+
+.ticket:not(:disabled):hover .poster,
+.ticket:not(:disabled):focus-visible .poster {
+  transform: translateY(-4px);
+  border-color: var(--accent);
 }
 
 .poster img {
@@ -338,194 +422,281 @@ main {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: opacity 240ms ease-out;
 }
 
-/* Shown when a poster image fails to load, so the ticket is never blank. */
-.poster .fallback {
+/* Shown when a poster fails to load, so a card is never blank. */
+.fallback {
   position: absolute;
   inset: 0;
   display: none;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  font: 700 28px/1.1 var(--display);
+  font-size: 22px;
+  font-weight: 600;
   text-align: center;
-  text-transform: uppercase;
-  color: var(--faded);
+  color: var(--dim);
 }
 
 .poster.missing img { display: none; }
 .poster.missing .fallback { display: flex; }
 
-.stub {
+.badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
   display: flex;
-  flex-direction: column;
-  flex: 1;
-  padding: 16px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
+
+/* R-21: each badge states a real result of the round. */
+.badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.badge.win { background: var(--accent); }
+.badge.good { background: var(--good); }
+.badge.bad { background: var(--bad); }
+.badge.them { background: var(--text); }
+
+.info { display: block; padding: 12px 4px 0; }
 
 .title {
   display: -webkit-box;
-  min-height: 2.2em;
-  margin: 0;
+  min-height: 3em;
   overflow: hidden;
-  font: 700 28px/1.1 var(--display);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-weight: 600;
+  line-height: 1.5;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
-.year {
-  margin: 8px 0 0;
-  font-size: 14px;
-  color: var(--faded);
-}
+.year { display: block; font-size: 14px; color: var(--dim); }
 
-/* The tear line, with a notch punched out at each end. */
-.tear {
-  position: relative;
-  margin: 16px -16px;
-  border-top: 2px dashed var(--ink);
-}
-
-.tear::before,
-.tear::after {
-  content: "";
-  position: absolute;
-  top: -9px;
-  width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  background: var(--ink);
-}
-
-.tear::before { left: -10px; }
-.tear::after { right: -10px; }
+.scorebox { display: block; margin-top: 8px; }
 
 .score {
-  margin: 0;
-  font: 700 48px/1 var(--display);
+  display: block;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--line);
   font-variant-numeric: tabular-nums;
-  color: var(--faded);
 }
 
-.sources {
-  min-height: 1.4em;
-  margin: 8px 0 0;
-  font-size: 14px;
-  color: var(--faded);
+.meter {
+  display: block;
+  height: 4px;
+  margin: 8px 0;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
 }
 
-.mark {
-  min-height: 1.4em;
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--dim);
+  /* R-19: the bar grows with the number on the reveal. */
+  transition: width 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-/* Theme rounds have no score to print, so the stub shows the track name once revealed. */
-.ticket.no-score .score { display: none; }
+.sources { display: block; min-height: 1.5em; font-size: 14px; color: var(--dim); }
 
-/* After the pick */
-.ticket.revealed .score { color: var(--paper); }
-.ticket.revealed:not(.top-score):not(.picked) { opacity: 0.7; }
+/* Theme rounds have no score to show, only the track name after the answer. */
+.ticket.unscored .score,
+.ticket.unscored .meter { display: none; }
 
-.ticket.top-score { border-color: var(--amber); }
-.ticket.top-score .score,
-.ticket.top-score .mark { color: var(--amber); }
+/* A 1v1 pick that is locked in but not yet revealed. */
+.ticket.chosen .poster { border-color: var(--text); }
 
-.ticket.picked.top-score { border-color: var(--right); }
-.ticket.picked.top-score .score,
-.ticket.picked.top-score .mark { color: var(--right); }
+/* After the reveal */
+.ticket.revealed .score { color: var(--text); }
+.ticket.revealed:not(.win):not(.miss) .poster img { opacity: 0.4; }
 
-.ticket.picked:not(.top-score) { border-color: var(--wrong); }
-.ticket.picked:not(.top-score) .mark { color: var(--wrong); }
+.ticket.win .poster { border-color: var(--accent); }
+.ticket.win .score { color: var(--accent); }
+.ticket.win .meter span { background: var(--accent); }
 
-/* Result bar */
+.ticket.hit .poster { border-color: var(--good); }
+.ticket.hit .score { color: var(--good); }
+.ticket.hit .meter span { background: var(--good); }
+
+.ticket.miss .poster { border-color: var(--bad); }
+
+/* ---------- messages and result ---------- */
+
+.notice { margin: 24px 0 16px; color: var(--dim); }
+
 .result {
   position: sticky;
-  bottom: 0;
+  bottom: 16px;
   display: flex;
   align-items: center;
-  justify-content: center;
   flex-wrap: wrap;
-  gap: 16px 24px;
-  padding: 16px 24px;
-  border-top: 2px solid var(--stub);
-  background: var(--ink);
+  gap: 12px 16px;
+  margin-top: 24px;
+  padding: 12px 12px 12px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
   animation: rise 240ms ease-out;
 }
 
-.result[hidden] { display: none; }
-
 @keyframes rise {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(12px); }
 }
 
-.verdict {
-  margin: 0;
-  font: 500 28px/1.2 var(--display);
-}
-
-.verdict.is-right { color: var(--right); }
-.verdict.is-wrong { color: var(--wrong); }
+.verdict { flex: 1; min-width: 200px; margin: 0; font-weight: 600; }
+.verdict.is-right { color: var(--good); }
+.verdict.is-wrong { color: var(--bad); }
 
 .store {
   display: inline-flex;
   align-items: center;
-  min-height: 48px;
-  color: var(--amber);
-  font-size: 18px;
+  min-height: 44px;
+  color: var(--text);
+  font-size: 14px;
 }
 
-.store[hidden] { display: none; }
+/* ---------- 1v1 lobby ---------- */
 
-.action {
-  min-height: 48px;
-  padding: 8px 32px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--amber);
-  color: var(--ink);
-  font: 700 28px/1 var(--display);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: transform 120ms ease-out;
+.lobby {
+  max-width: 560px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
 }
 
-.action:not(:disabled):hover { transform: translateY(-2px); }
-.action:active { transform: translateY(0); }
-.action[hidden] { display: none; }
+.lobby h2 { margin: 0 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.lobby p { margin: 0 0 16px; color: var(--dim); }
+.lobby .seg { margin-bottom: 16px; background: var(--bg); }
 
-.notice {
-  margin: 48px 0 16px;
-  color: var(--faded);
+.invite { display: flex; gap: 8px; margin-bottom: 16px; }
+
+.invite input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 14px;
 }
+
+.lobby-actions { display: flex; gap: 8px; }
+
+/* ---------- leaderboard ---------- */
+
+.panel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.panel-sub { font-size: 14px; color: var(--dim); }
+
+.ranks { margin: 0; padding: 0; list-style: none; }
+
+.ranks li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank { font-size: 14px; color: var(--dim); }
+.rank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-score { font-weight: 800; }
+.ranks li.me .rank-name,
+.ranks li.me .rank-score { color: var(--accent); }
+
+.panel-note { margin: 0; padding: 16px 0; border-top: 1px solid var(--line); font-size: 14px; color: var(--dim); }
+.panel-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; color: var(--dim); }
+.panel .btn { margin-bottom: 12px; }
+
+/* ---------- name dialog ---------- */
+
+.sheet {
+  width: min(360px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.sheet::backdrop { background: rgba(0, 0, 0, 0.6); }
+.sheet h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+.sheet p { margin: 0 0 16px; font-size: 14px; color: var(--dim); }
+
+.sheet input {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 16px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------- footer ---------- */
 
 .credits {
   width: 100%;
-  max-width: 1120px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 16px 24px 24px;
   font-size: 14px;
-  color: var(--faded);
+  color: var(--dim);
 }
 
-@media (max-width: 760px) {
-  .top { padding: 16px 16px 8px; flex-wrap: wrap; }
-  .name { width: 100%; }
-  main { padding: 8px 16px 16px; }
-  .tally { gap: 16px; }
-  .ask { margin-bottom: 16px; }
-  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  .stub { padding: 8px; }
-  .title { font-size: 18px; }
-  .score { font-size: 28px; }
-  .tear { margin: 8px -8px; }
+/* ---------- smaller screens ---------- */
+
+@media (max-width: 980px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .bar-in { flex-wrap: wrap; gap: 0 16px; padding: 8px 16px 0; }
+  .brand { min-height: 44px; display: flex; align-items: center; margin-right: auto; }
+  .tabs { order: 3; width: 100%; min-height: 44px; margin: 0 -12px; }
+  .layout { padding: 16px; gap: 24px; }
+  .controls { gap: 12px 16px; }
+  .years { min-width: 100%; flex-wrap: wrap; }
+  .years-text { min-width: 100%; }
+  .tally { margin-left: 0; }
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .score { font-size: 22px; }
+  .result { bottom: 8px; padding: 12px; }
   .credits { padding: 16px; }
 }
 

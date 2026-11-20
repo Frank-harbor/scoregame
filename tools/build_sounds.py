@@ -1,4 +1,4 @@
-"""Builds data/sounds.js: one soundtrack preview clip per well-known video game.
+"""Builds data/themes.js: one soundtrack preview clip per well-known video game.
 
 Clips are the 30-second previews Apple publishes through the iTunes Search API.
 Apple allows them to be played alongside a link to the track, so every entry keeps
@@ -101,10 +101,13 @@ def main():
             votes[tconst] = int(n)
 
     rows = json.loads((CACHE / "games.json").read_text(encoding="utf-8"))["results"]["bindings"]
-    games = {}
+    games, wiki, years = {}, {}, {}
     for row in rows:
         title = re.sub(r"\s\([^()]*video game\)$", "", row["title"]["value"])
         games[row["imdb"]["value"]] = title
+        wiki[row["imdb"]["value"]] = row["title"]["value"]
+        if "year" in row:
+            years[row["imdb"]["value"]] = int(row["year"]["value"])
     wanted = sorted(games, key=lambda i: -votes.get(i, 0))[:HOW_MANY]
 
     path = CACHE / "itunes.json"
@@ -121,12 +124,16 @@ def main():
         path.write_text(json.dumps(known), encoding="utf-8")
         print(f"  {n}/{len(wanted)} {games[imdb_id]}", flush=True)
 
+    # Each theme carries its own title, year and box art, so the round does not depend on
+    # which games made it into the ratings list.
+    images = json.loads((CACHE / "images.json").read_text(encoding="utf-8"))
     chosen = {i: best_track(games[i], known[i]) for i in wanted if i in known}
-    sounds = [{"id": i, **chosen[i]} for i in wanted if chosen.get(i)]
-    Path("data/sounds.js").write_text(
-        f"window.TOP_BILLING_SOUNDS = {json.dumps(sounds, ensure_ascii=False, separators=(',', ':'))};\n",
+    sounds = [{"id": i, "title": games[i], "year": years[i], "poster": images[wiki[i]], **chosen[i]}
+              for i in wanted if chosen.get(i) and images.get(wiki[i]) and i in years]
+    Path("data/themes.js").write_text(
+        f"window.SG_THEMES = {json.dumps(sounds, ensure_ascii=False, separators=(',', ':'))};\n",
         encoding="utf-8")
-    print(f"{len(sounds)} written to data/sounds.js")
+    print(f"{len(sounds)} written to data/themes.js")
 
 
 if __name__ == "__main__":

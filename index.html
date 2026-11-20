@@ -4,70 +4,126 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ScoreGame</title>
-  <meta name="description" content="Four movies or four video games, one hidden score each. Pick the highest or the lowest, or name a game from a split second of its theme.">
+  <meta name="description" content="Four movies or four games, one hidden score each. Pick the highest or the lowest, name a game from a split second of its theme, or play a friend 1v1.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="switch" role="group" aria-label="Which rating to pick">
-      <button class="option" type="button" data-target="highest" aria-pressed="true">Highest</button>
-      <button class="option" type="button" data-target="lowest" aria-pressed="false">Lowest</button>
+  <header class="bar">
+    <div class="bar-in">
+      <span class="brand">Score<b>Game</b></span>
+      <nav class="tabs" aria-label="What to play">
+        <button class="tab" type="button" data-mode="movies" aria-pressed="true">Movies</button>
+        <button class="tab" type="button" data-mode="games" aria-pressed="false">Games</button>
+        <button class="tab" type="button" data-mode="themes" aria-pressed="false">Themes</button>
+        <button class="tab" type="button" data-mode="duel" aria-pressed="false">1v1</button>
+      </nav>
+      <button class="who" id="who" type="button"></button>
     </div>
-    <h1 class="name">ScoreGame</h1>
-    <div class="switch" role="group" aria-label="What to play">
-      <button class="option" type="button" data-mode="movies" aria-pressed="true">Movies</button>
-      <button class="option" type="button" data-mode="games" aria-pressed="false">Games</button>
-      <button class="option" type="button" data-mode="themes" aria-pressed="false">Themes</button>
-    </div>
-    <dl class="tally">
-      <div><dt>Streak</dt><dd id="streak">0</dd></div>
-      <div><dt>Best</dt><dd id="best">0</dd></div>
-    </dl>
   </header>
 
-  <main>
-    <div class="years" id="years">
-      <span class="years-label">Years <strong id="yearsText"></strong></span>
-      <div class="range">
-        <div class="range-fill" id="rangeFill"></div>
-        <input type="range" id="yearFrom" step="1" aria-label="Earliest year">
-        <input type="range" id="yearTo" step="1" aria-label="Latest year">
+  <div class="layout">
+    <main class="play">
+      <div class="controls">
+        <div class="seg" id="targetSeg" role="group" aria-label="Which rating to pick">
+          <button type="button" data-target="highest" aria-pressed="true">Highest</button>
+          <button type="button" data-target="lowest" aria-pressed="false">Lowest</button>
+        </div>
+
+        <div class="years" id="years">
+          <span class="label">Years</span>
+          <div class="range">
+            <div class="range-fill" id="rangeFill"></div>
+            <input type="range" id="yearFrom" step="1" aria-label="Earliest year">
+            <input type="range" id="yearTo" step="1" aria-label="Latest year">
+          </div>
+          <span class="years-text" id="yearsText"></span>
+        </div>
+
+        <dl class="tally" id="tally">
+          <div><dt id="leftLabel">Streak</dt><dd id="streak">0</dd></div>
+          <div><dt id="rightLabel">Best</dt><dd id="best">0</dd></div>
+        </dl>
       </div>
-      <span class="years-count" id="yearsCount"></span>
-    </div>
 
-    <p class="ask" id="ask"></p>
+      <section class="lobby" id="lobby" hidden>
+        <h2 id="lobbyTitle"></h2>
+        <p id="lobbyText"></p>
+        <div class="seg" id="duelKindSeg" role="group" aria-label="What the match is played with">
+          <button type="button" data-kind="movies" aria-pressed="true">Movies</button>
+          <button type="button" data-kind="games" aria-pressed="false">Games</button>
+        </div>
+        <div class="invite" id="invite" hidden>
+          <input id="inviteLink" type="text" readonly aria-label="Room link">
+          <button class="btn ghost" id="copyLink" type="button">Copy link</button>
+        </div>
+        <div class="lobby-actions">
+          <button class="btn" id="createRoom" type="button">Create room</button>
+          <button class="btn ghost" id="leaveRoom" type="button" hidden>Close room</button>
+        </div>
+      </section>
 
-    <div class="player" id="player" hidden>
-      <button class="action clip" id="play" type="button">Play 0.5 seconds</button>
-      <ol class="stages" id="stages" aria-label="Clip lengths">
-        <li>0.5s</li><li>1s</li><li>3s</li><li>5s</li><li>10s</li>
-      </ol>
-      <button class="option" id="skip" type="button">Skip to 1 second</button>
-    </div>
+      <h2 class="ask" id="ask"></h2>
+      <div class="timer" id="timer" hidden><span></span></div>
 
-    <div class="board" id="board" aria-label="Four to choose from"></div>
+      <div class="player" id="player" hidden>
+        <button class="btn clip" id="play" type="button">Play 0.5 seconds</button>
+        <ol class="stages" id="stages" aria-label="Clip lengths">
+          <li>0.5s</li><li>1s</li><li>3s</li><li>5s</li><li>10s</li>
+        </ol>
+        <button class="btn ghost" id="skip" type="button">Skip to 1 second</button>
+      </div>
 
-    <p class="notice" id="notice" hidden></p>
-    <button class="action" id="retry" type="button" hidden>Try loading again</button>
-  </main>
+      <div class="board" id="board" aria-label="Four to choose from"></div>
 
-  <div class="result" id="result" hidden>
-    <p class="verdict" id="verdict" role="status" aria-live="polite"></p>
-    <a class="store" id="store" target="_blank" rel="noopener" hidden>Full track on Apple Music</a>
-    <button class="action" id="next" type="button">Next four</button>
+      <p class="notice" id="notice" hidden></p>
+      <button class="btn" id="retry" type="button" hidden>Try loading again</button>
+
+      <div class="result" id="result" hidden>
+        <p class="verdict" id="verdict" role="status" aria-live="polite"></p>
+        <a class="store" id="store" target="_blank" rel="noopener" hidden>Full track on Apple Music</a>
+        <button class="btn ghost" id="leaveMatch" type="button" hidden>Leave</button>
+        <button class="btn" id="next" type="button">Next four</button>
+      </div>
+    </main>
+
+    <aside class="side" aria-label="Leaderboard">
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Leaderboard</h2>
+          <span class="panel-sub" id="boardName"></span>
+        </header>
+        <ol class="ranks" id="ranks"></ol>
+        <p class="panel-note" id="ranksNote"></p>
+        <button class="btn ghost small" id="ranksRetry" type="button" hidden>Reload scores</button>
+        <p class="panel-foot" id="ranksScope"></p>
+      </section>
+    </aside>
   </div>
 
   <footer class="credits">
     Each score is the average of the IMDb rating (out of 10, counted as out of 100) and the Metacritic score. IMDb ratings come from IMDb's public ratings file, Metacritic scores from Wikidata and Wikipedia. Posters and box art from Wikipedia. Theme clips are Apple Music previews.
   </footer>
 
+  <dialog class="sheet" id="nameDialog" aria-labelledby="nameTitle">
+    <form method="dialog" id="nameForm">
+      <h2 id="nameTitle">Your name</h2>
+      <p>Shown on the leaderboard and to your 1v1 opponent.</p>
+      <input id="nameInput" type="text" maxlength="16" autocomplete="nickname" required aria-label="Your name">
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="nameCancel">Cancel</button>
+        <button class="btn" type="submit">Save name</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="config.js"></script>
   <script src="data/movies.js"></script>
   <script src="data/games.js"></script>
-  <script src="data/sounds.js"></script>
+  <script src="data/themes.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

@@ -15,6 +15,7 @@
     <div class="bar-in">
       <span class="brand">Score<b>Game</b></span>
       <nav class="tabs" aria-label="What to play">
+        <span class="glider" id="glider" aria-hidden="true"></span>
         <button class="tab" type="button" data-mode="themes" aria-pressed="true">Themes</button>
         <button class="tab" type="button" data-mode="clips" aria-pressed="false">Clips</button>
         <button class="tab" type="button" data-mode="movies" aria-pressed="false">Movies</button>
@@ -119,7 +120,7 @@
       <section class="panel" aria-label="Leaderboard">
         <header class="panel-head">
           <h2>Leaderboard</h2>
-          <span class="panel-sub" id="boardName"></span>
+          <select id="boardPick" aria-label="Which leaderboard"></select>
         </header>
         <ol class="ranks" id="ranks"></ol>
         <p class="panel-note" id="ranksNote"></p>

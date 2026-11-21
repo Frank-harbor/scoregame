@@ -720,7 +720,7 @@
       const mine = ++this.request;
       const list = $("ranks");
       const note = $("ranksNote");
-      $("boardName").textContent = boardLabel(key);
+      $("boardPick").value = key;
       $("ranksScope").textContent = this.shared
         ? "Bests from everyone who has played. Saved as you play."
         : "Bests on this device. Saved as you play.";
@@ -1225,8 +1225,16 @@
     retry.hidden = false;
   }
 
+  // Slides the filled pill under the active tab.
+  function moveGlider() {
+    const active = tabs.find((b) => b.dataset.mode === mode);
+    $("glider").style.width = `${active.offsetWidth}px`;
+    $("glider").style.transform = `translateX(${active.offsetLeft}px)`;
+  }
+
   function start() {
     press(tabs, "mode", mode);
+    moveGlider();
     clearBoard();
     stopClip();
     lost = false;
@@ -1349,6 +1357,10 @@
     `ScoreGame, ${boardLabel(boardKey())}: a streak of ${streak}. ${location.origin}${location.pathname}`,
     share, "Copy result"));
   $("ranksRetry").addEventListener("click", () => Ranks.show(Ranks.showing));
+  // Any leaderboard can be looked at from any mode. Changing mode brings its own board back.
+  $("boardPick").addEventListener("change", () => Ranks.show($("boardPick").value));
+  // The tab bar changes size when the window does and when the web font arrives.
+  new ResizeObserver(moveGlider).observe(document.querySelector(".tabs"));
 
   who.addEventListener("click", askName);
   $("help").addEventListener("click", () => $("helpDialog").showModal());
@@ -1388,6 +1400,15 @@
   clipButtons.forEach((b) => (b.hidden = !clipKinds.includes(b.dataset.clip)));
   topicButtons.forEach((b) => (b.hidden = !playable(b.dataset.topic)));
   tabs.find((b) => b.dataset.mode === "clips").hidden = clipKinds.length === 0;
+  $("boardPick").replaceChildren(...BOARD_KEYS
+    // Sound and clip boards are listed only when that list has something to play.
+    .filter((key) => !/^(themes|clips)\./.test(key) || playable(key.replace("s.", ":")))
+    .map((key) => {
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = boardLabel(key);
+      return option;
+    }));
   setVolume(load("volume") === null ? 0.8 : Number(load("volume")));
   showName();
   showStats();

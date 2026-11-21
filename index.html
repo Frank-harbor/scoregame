@@ -16,6 +16,7 @@
       <span class="brand">Score<b>Game</b></span>
       <nav class="tabs" aria-label="What to play">
         <span class="glider" id="glider" aria-hidden="true"></span>
+        <button class="tab" type="button" data-mode="mix" aria-pressed="false">Gauntlet</button>
         <button class="tab" type="button" data-mode="themes" aria-pressed="true">Themes</button>
         <button class="tab" type="button" data-mode="clips" aria-pressed="false">Clips</button>
         <button class="tab" type="button" data-mode="movies" aria-pressed="false">Movies</button>
@@ -67,6 +68,14 @@
           <div><dt id="rightLabel">Best</dt><dd id="best">0</dd></div>
         </dl>
       </div>
+
+      <section class="lobby" id="gate" hidden>
+        <h2>Gauntlet</h2>
+        <p id="gateText"></p>
+        <div class="lobby-actions">
+          <button class="btn" id="gateStart" type="button">Start run</button>
+        </div>
+      </section>
 
       <section class="lobby" id="lobby" hidden>
         <h2 id="lobbyTitle"></h2>
@@ -159,6 +168,8 @@
     <form method="dialog">
       <h2 id="helpTitle">How to play</h2>
       <dl class="rules">
+        <dt>Gauntlet</dt>
+        <dd>Every kind of round mixed into one run that lasts until your first miss. Three runs a day, with its own leaderboard.</dd>
         <dt>Themes</dt>
         <dd>Hear half a second of a soundtrack and pick which of the four it comes from. Stuck? Skip to a longer clip: 1, 3, 5, then 10 seconds.</dd>
         <dt>Clips</dt>

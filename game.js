@@ -11,6 +11,7 @@
   const SMALLEST_POOL = 8;
   const BOARD_ROWS = 10;
   const LIVES = 5;
+  const GAUNTLET_RUNS = 3; // runs allowed per day
   const RATED_SECONDS = 20;
   const THEME_SECONDS = 30;
   const DUEL_PAUSE_MS = 4500;
@@ -19,7 +20,7 @@
   // IMDb votes a title needs at each setting: Hits, Popular, Everything.
   const DEPTHS = { movies: [100000, 25000, 4000], games: [2000, 500, 100] };
   const BOARD_KEYS = ["movies.highest", "movies.lowest", "games.highest", "games.lowest",
-    "themes.game", "themes.movie", "themes.sound", "clips.movie", "clips.game", "duel"];
+    "themes.game", "themes.movie", "themes.sound", "clips.movie", "clips.game", "duel", "mix"];
   const THEME_NAMES = { game: "Game themes", movie: "Movie themes", sound: "Sound effects" };
 
   const $ = (id) => document.getElementById(id);
@@ -88,7 +89,7 @@
   const clipKinds = ["movie", "game"].filter((k) => playable(`clip:${k}`));
   const roomInLink = new URLSearchParams(location.search).get("room");
 
-  let mode = ["themes", "clips", "movies", "games", "duel"].includes(load("mode")) ? load("mode") : "themes";
+  let mode = ["mix", "themes", "clips", "movies", "games", "duel"].includes(load("mode")) ? load("mode") : "themes";
   if (mode === "clips" && clipKinds.length === 0) mode = "themes";
   if (roomInLink) mode = "duel";
   let target = load("target") === "lowest" ? "lowest" : "highest";
@@ -96,6 +97,7 @@
   let themeKind = themeKinds.includes(load("theme")) ? load("theme") : themeKinds[0] || "game";
   let clipKind = clipKinds.includes(load("clip")) ? load("clip") : clipKinds[0] || "movie";
   let range = { from: Number(load("from")) || 0, to: Number(load("to")) || 9999 };
+  let mixTopic = "movies"; // what the current Gauntlet round is played with
   let stream = null; // the hls.js player behind a Steam trailer
   let clipFrom = 0; // seconds into the clip where play starts
   let clipAt = 0.3; // how far through a trailer the clip is cut, as a fraction
@@ -143,13 +145,14 @@
   // What is on the table right now: a rated list ("movies", "games"), a sound list
   // ("theme:game", "theme:movie", "theme:sound") or a trailer list ("clip:movie", "clip:game").
   const topic = () => (mode === "duel" ? Duel.topic
+    : mode === "mix" ? mixTopic
     : mode === "themes" ? `theme:${themeKind}`
     : mode === "clips" ? `clip:${clipKind}`
     : mode);
   const rated = () => topic() === "movies" || topic() === "games";
   const isVideo = () => topic().startsWith("clip:");
   const listKind = () => topic();
-  const boardKey = () => (mode === "duel" ? "duel" : rated() ? `${topic()}.${target}` : topic().replace(":", "s."));
+  const boardKey = () => (mode === "duel" ? "duel" : mode === "mix" ? "mix" : rated() ? `${topic()}.${target}` : topic().replace(":", "s."));
   // A clip shows far more than a sound gives away, so it comes with six to choose from.
   const choices = () => (isVideo() ? 6 : 4);
   const clipSeconds = () => (isVideo() ? VIDEO_SECONDS : SOUND_SECONDS);
@@ -172,6 +175,7 @@
 
   function boardLabel(key) {
     if (key === "duel") return "1v1 · Win streak";
+    if (key === "mix") return "Gauntlet";
     const [what, which] = key.split(".");
     if (what === "themes") return THEME_NAMES[which];
     if (what === "clips") return which === "movie" ? "Movie clips" : "Game clips";
@@ -262,10 +266,17 @@
     return four.sort(() => Math.random() - 0.5);
   }
 
+  // The Gauntlet always plays the Hits, so everyone on its leaderboard faced the same pool.
   function buildPool() {
     const list = lists[listKind()];
+    const floor = (kind) => DEPTHS[kind][mode === "mix" ? 0 : depth];
+    if (isVideo()) {
+      const least = floor(topic() === "clip:movie" ? "movies" : "games");
+      return list.filter((m) => m.votes === undefined || m.votes >= least);
+    }
     if (!rated()) return list;
-    return showYears(list.filter((m) => m.votes >= DEPTHS[listKind()][depth]));
+    const known = list.filter((m) => m.votes >= floor(listKind()));
+    return mode === "mix" ? known : showYears(known);
   }
 
   /* ---------- pictures and clips ---------- */
@@ -456,9 +467,25 @@
     }
   }
 
+  // A Gauntlet round is a random kind: a theme, a clip, or a highest or lowest rating pick.
+  function nextGauntletRound() {
+    const kinds = Object.keys(lists).filter(playable);
+    for (let tries = 0; tries < 20; tries++) {
+      mixTopic = kinds[Math.floor(Math.random() * kinds.length)];
+      if (rated()) target = Math.random() < 0.5 ? "highest" : "lowest";
+      pool = buildPool();
+      if (pool.length >= choices() + 2) break;
+    }
+    unseen = [];
+    player.hidden = rated();
+    audio.hidden = !isVideo();
+    ask.textContent = askText();
+  }
+
   async function deal() {
     result.hidden = true;
     stopClip();
+    if (mode === "mix") nextGauntletRound();
     const thisDeal = hideTable();
 
     if (rated()) return layOut(drawRatedRound(soloGap()), true, thisDeal);
@@ -573,7 +600,7 @@
         ? `Right. ${winner.title}, from ${seconds(clipSeconds()[stage])}.`
         : `Streak over at ${streak}. That was ${winner.title}.`;
     }
-    next.textContent = right ? "Next round" : "Play again";
+    next.textContent = right ? "Next round" : mode === "mix" ? "Finish run" : "Play again";
     next.hidden = false;
     leaveMatch.hidden = true;
     share.hidden = right || streak === 0;
@@ -592,6 +619,7 @@
 
   function advance() {
     if (mode === "duel") return Duel.rematch();
+    if (mode === "mix" && lost) return start(); // back to the gate, where the next run is started
     if (lost) {
       lost = false;
       streak = 0;
@@ -818,13 +846,13 @@
 
   // Shows the controls that mean something for what is being played.
   function showControls() {
-    const clip = !rated();
+    const clip = !rated() || mode === "mix";
     themeSeg.hidden = mode !== "themes" || themeKinds.length < 2;
     clipSeg.hidden = mode !== "clips" || clipKinds.length < 2;
     audio.hidden = !isVideo();
     press(clipButtons, "clip", clipKind);
     targetSeg.hidden = clip;
-    depthSeg.hidden = clip;
+    depthSeg.hidden = (clip && !isVideo()) || mode === "mix";
     years.hidden = clip;
     press(targetButtons, "target", target);
     press(depthButtons, "depth", depth);
@@ -1232,6 +1260,48 @@
     $("glider").style.transform = `translateX(${active.offsetLeft}px)`;
   }
 
+  /* ---------- the Gauntlet ---------- */
+
+  const today = () => new Date().toLocaleDateString("en-CA"); // the player's own calendar day
+
+  function runsLeft() {
+    if (load("mix.day") !== today()) return GAUNTLET_RUNS;
+    return Math.max(0, GAUNTLET_RUNS - (Number(load("mix.used")) || 0));
+  }
+
+  function showGate() {
+    showControls();
+    tally.hidden = false;
+    leftLabel.textContent = "Streak";
+    rightLabel.textContent = "Best";
+    streak = 0;
+    best = Number(load("best.mix")) || 0;
+    streakEl.textContent = streak;
+    bestEl.textContent = best;
+    audio.hidden = true;
+    Ranks.show("mix");
+    const left = runsLeft();
+    $("gate").hidden = false;
+    $("gateStart").hidden = left === 0;
+    $("gateText").textContent =
+      "Every kind of round in one run: themes, clips, highest and lowest ratings. It goes on until your first miss. " +
+      (left ? `Runs left today: ${left} of ${GAUNTLET_RUNS}.` : `You have used all ${GAUNTLET_RUNS} runs for today. New runs tomorrow.`);
+  }
+
+  // A run is spent the moment it starts, so leaving half way does not hand it back.
+  function startRun() {
+    if (runsLeft() === 0) return showGate();
+    save("mix.used", load("mix.day") === today() ? (Number(load("mix.used")) || 0) + 1 : 1);
+    save("mix.day", today());
+    $("gate").hidden = true;
+    streak = 0;
+    lost = false;
+    ask.hidden = false;
+    notice.hidden = false;
+    notice.textContent = "Dealing the first round.";
+    deal();
+  }
+
   function start() {
     press(tabs, "mode", mode);
     moveGlider();
@@ -1246,9 +1316,13 @@
     player.hidden = true;
     lobby.hidden = true;
     ask.hidden = true;
+    $("gate").hidden = true;
 
     if (mode === "duel") return Duel.enter();
     Duel.leave();
+    // The Gauntlet flips highest and lowest by itself. Everywhere else the saved choice applies.
+    target = load("target") === "lowest" ? "lowest" : "highest";
+    if (mode === "mix") return showGate();
 
     const list = lists[listKind()];
     showControls();
@@ -1335,6 +1409,7 @@
   playButton.addEventListener("click", () => playClip(clipSeconds()[stage]));
   skipButton.addEventListener("click", longerClip);
   volume.addEventListener("input", () => setVolume(Number(volume.value) / 100));
+  $("gateStart").addEventListener("click", startRun);
   $("createRoom").addEventListener("click", () => Duel.create());
   $("leaveRoom").addEventListener("click", () => Duel.leave());
 

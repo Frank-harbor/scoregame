@@ -19,8 +19,8 @@ import urllib.request
 from pathlib import Path
 
 CACHE = Path("data/cache")
-MOVIE_MIN_VOTES = 25_000
-GAME_MIN_VOTES = 500
+MOVIE_MIN_VOTES = 4_000
+GAME_MIN_VOTES = 100
 UA = {"User-Agent": "movie-game-prototype/0.1"}
 
 
@@ -74,7 +74,7 @@ def movie_trailers(movies):
         print(f"  movie trailers {min(i + 150, len(todo))}/{len(todo)}", flush=True)
         time.sleep(3.2)
     return [{"id": m["id"], "kind": "movie", "title": m["title"], "year": m["year"], "poster": m["poster"],
-             **known[apple[m["id"]]]}
+             "votes": m["votes"], **known[apple[m["id"]]]}
             for m in movies if m["id"] in apple and known.get(apple[m["id"]])]
 
 
@@ -97,7 +97,7 @@ def game_trailers(games):
         print(f"  game trailers {n}/{len(todo)} {game['title']}", flush=True)
         time.sleep(1.6)  # Steam allows about 200 lookups every 5 minutes
     return [{"id": g["id"], "kind": "game", "title": g["title"], "year": g["year"], "poster": g["poster"],
-             "hls": known[steam[g["id"]]], "link": f"https://store.steampowered.com/app/{steam[g['id']]}"}
+             "votes": g["votes"], "hls": known[steam[g["id"]]], "link": f"https://store.steampowered.com/app/{steam[g['id']]}"}
             for g in games if g["id"] in steam and known.get(steam[g["id"]])]
 
 

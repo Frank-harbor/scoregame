@@ -54,14 +54,16 @@ def cache(name):
 
 
 def movie_trailers(movies):
-    apple = id_map("itunes_movie_ids.json", "itunes")
+    # Wikidata holds a few Apple TV codes in this field. One of those makes Apple reject
+    # the whole batch, so only plain store numbers go into a lookup.
+    apple = {imdb: store for imdb, store in id_map("itunes_movie_ids.json", "itunes").items() if store.isdigit()}
     path, known = cache("movie_trailers.json")
     todo = [apple[m["id"]] for m in movies if m["id"] in apple and apple[m["id"]] not in known]
     for i in range(0, len(todo), 150):  # one request answers for 150 movies
         batch = todo[i : i + 150]
         reply = get_json("https://itunes.apple.com/lookup?country=us&id=" + ",".join(batch))
         if reply is None:
-            print("Apple is refusing lookups for now. Run again later to carry on.")
+            print("Apple did not answer this batch. Run again later to carry on.")
             break
         for apple_id in batch:
             known[apple_id] = None

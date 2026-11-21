@@ -15,6 +15,7 @@ import json
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -43,8 +44,21 @@ def titles(name, variable):
     return json.loads(text[len(f"window.{variable} = "):].rstrip().rstrip(";"))
 
 
+# Wikidata lists which store each title is sold in: P6398 is the iTunes movie ID, P1733 the Steam ID.
+ID_QUERIES = {
+    "itunes_movie_ids.json": "SELECT ?imdb ?itunes WHERE { ?f wdt:P6398 ?itunes; wdt:P345 ?imdb. }",
+    "steam_ids.json": "SELECT ?imdb ?steam WHERE { ?f wdt:P31 wd:Q7889; wdt:P1733 ?steam; wdt:P345 ?imdb. }",
+}
+
+
 def id_map(name, key):
-    rows = json.loads((CACHE / name).read_text(encoding="utf-8"))["results"]["bindings"]
+    path = CACHE / name
+    if not path.exists():
+        print("fetching", name, flush=True)
+        url = "https://query.wikidata.org/sparql?format=json&query=" + urllib.parse.quote(ID_QUERIES[name])
+        with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=180) as res:
+            path.write_bytes(res.read())
+    rows = json.loads(path.read_text(encoding="utf-8"))["results"]["bindings"]
     return {row["imdb"]["value"]: row[key]["value"] for row in rows}
 
 
